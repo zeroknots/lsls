@@ -17,6 +17,7 @@ enum SidebarSection: Hashable {
 struct SidebarView: View {
     @Binding var selection: SidebarSection?
     @Environment(PlexConnectionState.self) private var plexState
+    @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
@@ -108,6 +109,54 @@ struct SidebarView: View {
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
                     .textCase(nil)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if libraryManager.isImporting || syncManager.isSyncing {
+                VStack(spacing: 0) {
+                    Divider()
+                    VStack(spacing: 8) {
+                        if libraryManager.isImporting {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "folder.badge.plus")
+                                        .font(.caption)
+                                        .foregroundStyle(colors.accent)
+                                    Text("Importing...")
+                                        .font(.system(size: theme.typography.captionSize, weight: .medium))
+                                        .foregroundStyle(colors.textPrimary)
+                                }
+                                ProgressView(value: libraryManager.importProgress)
+                                    .tint(colors.accent)
+                                Text(libraryManager.importStatus)
+                                    .font(.system(size: theme.typography.smallCaptionSize))
+                                    .foregroundStyle(colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if syncManager.isSyncing {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.caption)
+                                        .foregroundStyle(colors.accent)
+                                    Text("Syncing to Rockbox...")
+                                        .font(.system(size: theme.typography.captionSize, weight: .medium))
+                                        .foregroundStyle(colors.textPrimary)
+                                }
+                                ProgressView(value: syncManager.syncProgress)
+                                    .tint(colors.accent)
+                                Text(syncManager.syncStatus)
+                                    .font(.system(size: theme.typography.smallCaptionSize))
+                                    .foregroundStyle(colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .background(.ultraThinMaterial)
             }
         }
         .listStyle(.sidebar)
