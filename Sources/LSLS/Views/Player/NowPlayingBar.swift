@@ -73,9 +73,23 @@ struct NowPlayingBar: View {
 
                 Spacer()
 
-                // Right: Volume
-                VolumeSlider()
-                    .frame(width: 180)
+                // Right: Queue toggle + Volume
+                HStack(spacing: 16) {
+                    Button {
+                        withAnimation {
+                            playerState.isQueueVisible.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 14))
+                            .foregroundStyle(playerState.isQueueVisible ? colors.accent : colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Toggle Queue")
+
+                    VolumeSlider()
+                        .frame(width: 180)
+                }
             }
             .padding(.top, 3) // Account for progress bar height
             .padding(.horizontal, 28)

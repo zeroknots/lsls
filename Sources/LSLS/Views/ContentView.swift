@@ -22,6 +22,10 @@ struct ContentView: View {
                     .safeAreaPadding(.bottom, playerState.currentTrack != nil ? 90 : 0)
                     .background(colors.background)
             }
+            .inspector(isPresented: Bindable(playerState).isQueueVisible) {
+                QueueSidebarView()
+                    .inspectorColumnWidth(min: 250, ideal: 280, max: 350)
+            }
             .searchable(text: $searchText, prompt: "Search music")
             .onChange(of: searchText) { _, newValue in
                 if !newValue.isEmpty {
@@ -51,6 +55,18 @@ struct ContentView: View {
                         Image(systemName: "chevron.right")
                     }
                     .disabled(forwardAlbum == nil)
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation {
+                            playerState.isQueueVisible.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .foregroundStyle(playerState.isQueueVisible ? colors.accent : colors.textSecondary)
+                    }
+                    .help("Toggle Queue")
                 }
 
                 ToolbarItem(placement: .primaryAction) {

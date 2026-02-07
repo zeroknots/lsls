@@ -85,6 +85,8 @@ struct PlexAlbumDetailView: View {
                                 isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id
                             ) {
                                 playerState.play(track: trackInfo, fromQueue: trackInfos)
+                            } onAddToQueue: {
+                                playerState.addToQueueEnd(trackInfo)
                             }
                         }
                     }

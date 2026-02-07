@@ -208,6 +208,8 @@ struct ArtistListView: View {
                     playlists: playlists
                 ) {
                     playerState.play(track: trackInfo, fromQueue: allArtistTracks)
+                } onAddToQueue: {
+                    playerState.addToQueueEnd(trackInfo)
                 } onSyncToggle: {
                     guard let trackId = trackInfo.track.id else { return }
                     if syncManager.isTrackInSyncList(trackId) {
@@ -254,6 +256,7 @@ struct ArtistListView: View {
             .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
+        .draggable(LibraryDragItem.artist(artist))
         .contextMenu {
             if let artistId = artist.id {
                 if syncManager.isArtistInSyncList(artistId) {

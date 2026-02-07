@@ -137,6 +137,8 @@ struct SearchResultsView: View {
                                         playlists: playlists
                                     ) {
                                         playerState.play(track: trackInfo, fromQueue: tracks)
+                                    } onAddToQueue: {
+                                        playerState.addToQueueEnd(trackInfo)
                                     } onAddToPlaylist: { playlist in
                                         addTrackToPlaylist(trackInfo, playlist: playlist)
                                     } onDelete: {

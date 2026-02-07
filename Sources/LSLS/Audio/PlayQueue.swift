@@ -55,6 +55,10 @@ final class PlayQueue {
         tracks.insert(track, at: currentIndex + 1)
     }
 
+    func appendToEnd(_ track: TrackInfo) {
+        tracks.append(track)
+    }
+
     func remove(at index: Int) {
         guard index >= 0, index < tracks.count else { return }
         tracks.remove(at: index)
@@ -62,6 +66,20 @@ final class PlayQueue {
             currentIndex -= 1
         } else if index == currentIndex {
             currentIndex = min(currentIndex, tracks.count - 1)
+        }
+    }
+
+    func removeFromUpNext(at upNextIndex: Int) {
+        let absoluteIndex = currentIndex + 1 + upNextIndex
+        guard absoluteIndex < tracks.count else { return }
+        remove(at: absoluteIndex)
+    }
+
+    func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        let currentTrack = current
+        tracks.move(fromOffsets: source, toOffset: destination)
+        if let currentTrack, let newIndex = tracks.firstIndex(where: { $0.track.id == currentTrack.track.id }) {
+            currentIndex = newIndex
         }
     }
 }
