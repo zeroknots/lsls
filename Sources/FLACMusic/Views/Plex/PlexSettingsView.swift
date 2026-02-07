@@ -2,85 +2,108 @@ import SwiftUI
 
 struct PlexSettingsView: View {
     @Environment(PlexConnectionState.self) private var plexState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var isAuthenticating = false
     @State private var authError: String?
     @State private var servers: [PlexServer] = []
-    @State private var showServerPicker = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: theme.spacing.sectionSpacing) {
                 // Header
                 VStack(spacing: 8) {
                     Image(systemName: "server.rack")
                         .font(.system(size: 48))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colors.textTertiary)
                     Text("Plex Music")
-                        .font(.title.bold())
+                        .font(.system(size: theme.typography.titleSize, weight: .bold))
+                        .foregroundStyle(colors.textPrimary)
                     Text("Stream music from your Plex Media Server")
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.textSecondary)
                 }
                 .padding(.top, 40)
 
                 if plexState.isConnected {
-                    // Connected state - show server info and disconnect
                     connectedView
                 } else if isAuthenticating {
-                    // Authenticating state
                     authenticatingView
                 } else {
-                    // Disconnected - show connect button
                     disconnectedView
                 }
 
                 if let error = authError {
                     Text(error)
                         .foregroundStyle(.red)
-                        .font(.caption)
+                        .font(.system(size: theme.typography.captionSize))
                 }
             }
-            .padding(24)
+            .padding(theme.spacing.contentPadding)
             .frame(maxWidth: .infinity)
         }
+        .background(colors.background)
         .navigationTitle("Plex Settings")
     }
 
     private var connectedView: some View {
         VStack(spacing: 16) {
-            // Server info card
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let server = plexState.selectedServer {
-                        LabeledContent("Server", value: server.name)
-                        LabeledContent("Address", value: "\(server.host):\(server.port)")
-                    }
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Connected", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: theme.typography.bodySize, weight: .semibold))
+                    .foregroundStyle(.green)
 
-                    if let library = plexState.selectedLibrary {
-                        LabeledContent("Library", value: library.title)
+                if let server = plexState.selectedServer {
+                    LabeledContent {
+                        Text(server.name)
+                            .foregroundStyle(colors.textPrimary)
+                    } label: {
+                        Text("Server")
+                            .foregroundStyle(colors.textSecondary)
                     }
+                    .font(.system(size: theme.typography.bodySize))
 
-                    // Library picker if multiple libraries available
-                    if plexState.musicLibraries.count > 1 {
-                        Picker("Music Library", selection: Binding(
-                            get: { plexState.selectedLibrary },
-                            set: { newValue in
-                                plexState.selectedLibrary = newValue
-                                plexState.saveState()
-                            }
-                        )) {
-                            ForEach(plexState.musicLibraries) { library in
-                                Text(library.title).tag(Optional(library))
-                            }
+                    LabeledContent {
+                        Text("\(server.host):\(server.port)")
+                            .foregroundStyle(colors.textPrimary)
+                    } label: {
+                        Text("Address")
+                            .foregroundStyle(colors.textSecondary)
+                    }
+                    .font(.system(size: theme.typography.bodySize))
+                }
+
+                if let library = plexState.selectedLibrary {
+                    LabeledContent {
+                        Text(library.title)
+                            .foregroundStyle(colors.textPrimary)
+                    } label: {
+                        Text("Library")
+                            .foregroundStyle(colors.textSecondary)
+                    }
+                    .font(.system(size: theme.typography.bodySize))
+                }
+
+                if plexState.musicLibraries.count > 1 {
+                    Picker("Music Library", selection: Binding(
+                        get: { plexState.selectedLibrary },
+                        set: { newValue in
+                            plexState.selectedLibrary = newValue
+                            plexState.saveState()
+                        }
+                    )) {
+                        ForEach(plexState.musicLibraries) { library in
+                            Text(library.title).tag(Optional(library))
                         }
                     }
                 }
-                .padding(4)
-            } label: {
-                Label("Connected", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
             }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: theme.shapes.cardRadius)
+                    .fill(colors.surface)
+            )
 
-            // Server picker (if multiple servers found)
             if servers.count > 1 {
                 Picker("Server", selection: Binding(
                     get: { plexState.selectedServer },
@@ -88,7 +111,6 @@ struct PlexSettingsView: View {
                         if let newServer = newValue {
                             Task {
                                 plexState.selectedServer = newServer
-                                // Reload libraries for new server
                                 let libraries = try? await plexState.auth.getMusicLibraries(
                                     server: newServer)
                                 plexState.musicLibraries = libraries ?? []
@@ -108,8 +130,7 @@ struct PlexSettingsView: View {
                 plexState.disconnect()
                 servers = []
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.red)
+            .buttonStyle(AccentOutlineButtonStyle())
         }
     }
 
@@ -118,10 +139,11 @@ struct PlexSettingsView: View {
             ProgressView()
                 .controlSize(.large)
             Text("Waiting for authentication...")
-                .foregroundStyle(.secondary)
+                .font(.system(size: theme.typography.bodySize))
+                .foregroundStyle(colors.textSecondary)
             Text("A browser window has opened. Please sign in to Plex.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: theme.typography.captionSize))
+                .foregroundStyle(colors.textTertiary)
                 .multilineTextAlignment(.center)
         }
     }
@@ -133,8 +155,7 @@ struct PlexSettingsView: View {
             } label: {
                 Label("Connect to Plex", systemImage: "link")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(AccentFilledButtonStyle())
         }
     }
 
@@ -148,7 +169,6 @@ struct PlexSettingsView: View {
                 plexState.auth.openAuthPage(pin: pin)
                 let token = try await plexState.auth.pollForToken(pinId: pin.id)
 
-                // Discover servers
                 let discoveredServers = try await plexState.auth.discoverServers(token: token)
                 servers = discoveredServers
 

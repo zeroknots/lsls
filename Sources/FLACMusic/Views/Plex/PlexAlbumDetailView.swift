@@ -4,6 +4,8 @@ struct PlexAlbumDetailView: View {
     let album: PlexAlbum
     @Environment(PlexConnectionState.self) private var plexState
     @Environment(PlayerState.self) private var playerState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var tracks: [PlexTrack] = []
     @State private var trackInfos: [TrackInfo] = []
@@ -13,41 +15,32 @@ struct PlexAlbumDetailView: View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: 20) {
-                // Album artwork
-                Group {
-                    if let server = plexState.selectedServer, let url = album.artworkURL(server: server) {
-                        AsyncImage(url: url) { image in
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            artworkPlaceholder
-                        }
-                    } else {
-                        artworkPlaceholder
-                    }
-                }
-                .frame(width: 200, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                AlbumArtView(
+                    album: nil,
+                    size: 220,
+                    artworkURL: plexState.selectedServer.flatMap { album.artworkURL(server: $0) }
+                )
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(album.title)
-                        .font(.title.bold())
+                        .font(.system(size: theme.typography.titleSize, weight: .bold))
+                        .foregroundStyle(colors.textPrimary)
 
                     if let artist = album.parentTitle {
                         Text(artist)
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: theme.typography.headlineSize))
+                            .foregroundStyle(colors.textSecondary)
                     }
 
                     if let year = album.year {
                         Text(String(year))
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: theme.typography.captionSize))
+                            .foregroundStyle(colors.textTertiary)
                     }
 
                     Text("\(tracks.count) songs · \(totalDuration)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.textSecondary)
 
                     HStack(spacing: 12) {
                         Button("Play All") {
@@ -55,8 +48,7 @@ struct PlexAlbumDetailView: View {
                                 playerState.play(track: first, fromQueue: trackInfos)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(AccentFilledButtonStyle())
 
                         Button("Shuffle") {
                             if let random = trackInfos.randomElement() {
@@ -64,8 +56,7 @@ struct PlexAlbumDetailView: View {
                                 playerState.play(track: random, fromQueue: trackInfos)
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                        .buttonStyle(AccentOutlineButtonStyle())
                     }
                     .padding(.top, 8)
                     .disabled(trackInfos.isEmpty)
@@ -73,9 +64,11 @@ struct PlexAlbumDetailView: View {
 
                 Spacer()
             }
-            .padding(24)
+            .padding(28)
 
-            Divider()
+            Rectangle()
+                .fill(colors.separator)
+                .frame(height: 1)
 
             // Track list
             if isLoading {
@@ -93,32 +86,19 @@ struct PlexAlbumDetailView: View {
                             ) {
                                 playerState.play(track: trackInfo, fromQueue: trackInfos)
                             }
-                            Divider().padding(.leading, 50)
                         }
                     }
                     .padding(.horizontal, 16)
                 }
             }
         }
+        .background(colors.background)
         .task {
             isLoading = true
             let browser = PlexLibraryBrowser(plexState: plexState)
             tracks = await browser.fetchTracksForAlbum(album)
             trackInfos = browser.makeTrackInfos(from: tracks, album: album)
             isLoading = false
-        }
-    }
-
-    private var artworkPlaceholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [.gray.opacity(0.3), .gray.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "music.note")
-                .font(.system(size: 200 * 0.3))
-                .foregroundStyle(.secondary)
         }
     }
 

@@ -3,12 +3,19 @@ import SwiftUI
 struct PlexAlbumGridView: View {
     @Environment(PlexConnectionState.self) private var plexState
     @Environment(PlayerState.self) private var playerState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var browser: PlexLibraryBrowser?
     @State private var albums: [PlexAlbum] = []
     @State private var selectedAlbum: PlexAlbum?
     @State private var isLoading = false
 
-    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 200), spacing: 20)]
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(
+            minimum: theme.spacing.gridItemSize,
+            maximum: theme.spacing.gridItemSize + 30
+        ), spacing: theme.spacing.gridSpacing)]
+    }
 
     var body: some View {
         ScrollView {
@@ -21,19 +28,20 @@ struct PlexAlbumGridView: View {
                 } description: {
                     Text("No albums found in your Plex library")
                 }
+                .foregroundStyle(colors.textSecondary)
                 .padding(.top, 100)
             } else {
-                LazyVGrid(columns: columns, spacing: 24) {
+                LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
                     ForEach(albums) { album in
-                        PlexAlbumCard(album: album, server: plexState.selectedServer)
-                            .onTapGesture {
-                                selectedAlbum = album
-                            }
+                        PlexAlbumCard(album: album, server: plexState.selectedServer) {
+                            selectedAlbum = album
+                        }
                     }
                 }
-                .padding(24)
+                .padding(theme.spacing.contentPadding)
             }
         }
+        .background(colors.background)
         .navigationTitle("Plex Albums")
         .task {
             let b = PlexLibraryBrowser(plexState: plexState)
@@ -55,48 +63,52 @@ struct PlexAlbumGridView: View {
 private struct PlexAlbumCard: View {
     let album: PlexAlbum
     let server: PlexServer?
+    var onTap: (() -> Void)?
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    private var size: CGFloat { CGFloat(theme.spacing.gridItemSize) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Group {
-                if let server, let url = album.artworkURL(server: server) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        albumPlaceholder
-                    }
-                } else {
-                    albumPlaceholder
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                AlbumArtView(
+                    album: nil,
+                    size: size,
+                    artworkURL: server.flatMap { album.artworkURL(server: $0) }
+                )
+
+                if isHovered {
+                    RoundedRectangle(cornerRadius: theme.shapes.albumArtRadius)
+                        .fill(.black.opacity(0.3))
+                        .frame(width: size, height: size)
+
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: size * 0.25))
+                        .foregroundStyle(.white.opacity(0.9))
                 }
             }
-            .frame(width: 170, height: 170)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
 
             Text(album.title)
-                .font(.subheadline.weight(.medium))
+                .font(.system(size: theme.typography.bodySize, weight: .medium))
+                .foregroundStyle(colors.textPrimary)
                 .lineLimit(1)
+                .padding(.leading, 2)
 
             if let artist = album.parentTitle {
                 Text(artist)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: theme.typography.captionSize))
+                    .foregroundStyle(colors.textSecondary)
                     .lineLimit(1)
+                    .padding(.leading, 2)
             }
         }
-        .frame(width: 170)
-    }
-
-    private var albumPlaceholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [.gray.opacity(0.3), .gray.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "music.note")
-                .font(.system(size: 170 * 0.3))
-                .foregroundStyle(.secondary)
-        }
+        .frame(width: size)
+        .scaleEffect(isHovered ? theme.effects.hoverScale : 1.0)
+        .animation(.spring(duration: 0.2), value: isHovered)
+        .onHover { isHovered = $0 }
+        .onTapGesture { onTap?() }
     }
 }
