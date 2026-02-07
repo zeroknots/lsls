@@ -12,6 +12,8 @@ enum RepeatMode: String, CaseIterable {
 final class PlayerState {
     let engine = AudioEngine()
     let queue = PlayQueue()
+    private var nowPlayingManager: NowPlayingManager?
+    private var nowPlayingTimer: Timer?
 
     var currentTrack: TrackInfo?
     var isPlaying: Bool { engine.isPlaying }
@@ -29,6 +31,7 @@ final class PlayerState {
         engine.onTrackFinished = { [weak self] in
             self?.playNext()
         }
+        nowPlayingManager = NowPlayingManager(playerState: self)
     }
 
     func play(track: TrackInfo, fromQueue: [TrackInfo]? = nil) {
@@ -42,6 +45,7 @@ final class PlayerState {
 
     func togglePlayPause() {
         engine.togglePlayPause()
+        updateNowPlaying()
     }
 
     func playNext() {
@@ -58,6 +62,8 @@ final class PlayerState {
             } else {
                 engine.stop()
                 currentTrack = nil
+                nowPlayingTimer?.invalidate()
+                updateNowPlaying()
             }
             return
         }
@@ -75,6 +81,7 @@ final class PlayerState {
 
     func seek(to time: TimeInterval) {
         engine.seek(to: time)
+        updateNowPlaying()
     }
 
     func seekFraction(_ fraction: Double) {
@@ -117,9 +124,29 @@ final class PlayerState {
             do {
                 try await engine.load(url: url)
                 engine.play()
+                updateNowPlaying()
+                startNowPlayingTimer()
             } catch {
                 print("Failed to load track: \(error)")
                 playNext()
+            }
+        }
+    }
+
+    private func updateNowPlaying() {
+        nowPlayingManager?.updateNowPlaying(
+            track: currentTrack,
+            isPlaying: engine.isPlaying,
+            currentTime: engine.currentTime,
+            duration: engine.duration
+        )
+    }
+
+    private func startNowPlayingTimer() {
+        nowPlayingTimer?.invalidate()
+        nowPlayingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateNowPlaying()
             }
         }
     }
