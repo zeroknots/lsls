@@ -7,18 +7,26 @@ struct TrackRow: View {
     var onPlay: () -> Void
     var onSyncToggle: (() -> Void)?
     var isInSyncList: Bool
+    var playlists: [Playlist]
+    var onAddToPlaylist: ((Playlist) -> Void)?
+    var onDelete: (() -> Void)?
+    var onEdit: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, onPlay: @escaping () -> Void, onSyncToggle: (() -> Void)? = nil) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
         self.isInSyncList = isInSyncList
+        self.playlists = playlists
         self.onPlay = onPlay
         self.onSyncToggle = onSyncToggle
+        self.onAddToPlaylist = onAddToPlaylist
+        self.onDelete = onDelete
+        self.onEdit = onEdit
     }
 
     var body: some View {
@@ -86,9 +94,32 @@ struct TrackRow: View {
             onPlay()
         }
         .contextMenu {
+            if let onEdit {
+                Button("Edit...") {
+                    onEdit()
+                }
+            }
+
             if let onSyncToggle {
                 Button(isInSyncList ? "Remove from Sync List" : "Add to Sync List") {
                     onSyncToggle()
+                }
+            }
+
+            if let onAddToPlaylist, !playlists.isEmpty {
+                Menu("Add to Playlist") {
+                    ForEach(playlists) { playlist in
+                        Button(playlist.name) {
+                            onAddToPlaylist(playlist)
+                        }
+                    }
+                }
+            }
+
+            if let onDelete {
+                Divider()
+                Button("Delete", role: .destructive) {
+                    onDelete()
                 }
             }
         }

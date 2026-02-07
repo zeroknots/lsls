@@ -7,6 +7,9 @@ struct PlaylistDetailView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var tracks: [TrackInfo] = []
+    @State private var playlists: [Playlist] = []
+    @State private var trackToEdit: TrackInfo? = nil
+    @State private var trackToDelete: TrackInfo? = nil
 
     private let db = DatabaseManager.shared
 
@@ -78,9 +81,16 @@ struct PlaylistDetailView: View {
                     ForEach(tracks) { trackInfo in
                         TrackRow(
                             trackInfo: trackInfo,
-                            isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id
+                            isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
+                            playlists: playlists
                         ) {
                             playerState.play(track: trackInfo, fromQueue: tracks)
+                        } onAddToPlaylist: { targetPlaylist in
+                            addTrackToPlaylist(trackInfo, playlist: targetPlaylist)
+                        } onDelete: {
+                            trackToDelete = trackInfo
+                        } onEdit: {
+                            trackToEdit = trackInfo
                         }
                     }
                     .onDelete { indexSet in
@@ -96,6 +106,26 @@ struct PlaylistDetailView: View {
         .navigationTitle(playlist.name)
         .task {
             loadTracks()
+            loadPlaylists()
+        }
+        .sheet(item: $trackToEdit) { trackInfo in
+            TrackEditView(trackInfo: trackInfo) {
+                loadTracks()
+            }
+        }
+        .alert("Delete Track?", isPresented: Binding(
+            get: { trackToDelete != nil },
+            set: { if !$0 { trackToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { trackToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let track = trackToDelete {
+                    deleteTrack(track)
+                    trackToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will remove \"\(trackToDelete?.track.title ?? "")\" from your library and all playlists.")
         }
     }
 
@@ -107,6 +137,42 @@ struct PlaylistDetailView: View {
             }
         } catch {
             print("Failed to load playlist tracks: \(error)")
+        }
+    }
+
+    private func loadPlaylists() {
+        do {
+            playlists = try db.dbQueue.read { db in
+                try LibraryQueries.allPlaylists(in: db)
+            }
+        } catch {
+            print("Failed to load playlists: \(error)")
+        }
+    }
+
+    private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
+        guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+            }
+        } catch {
+            print("Failed to add track to playlist: \(error)")
+        }
+    }
+
+    private func deleteTrack(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        if playerState.currentTrack?.track.id == trackId {
+            playerState.playNext()
+        }
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.deleteTrack(trackId, in: dbConn)
+            }
+            loadTracks()
+        } catch {
+            print("Failed to delete track: \(error)")
         }
     }
 
