@@ -10,11 +10,19 @@ struct SearchResultsView: View {
     @State private var tracks: [TrackInfo] = []
     @State private var albums: [AlbumInfo] = []
     @State private var artists: [Artist] = []
-    @State private var selectedAlbum: Album?
+    @Binding var selectedAlbum: Album?
 
     private let db = DatabaseManager.shared
 
     var body: some View {
+        searchContent
+        .background(colors.background)
+        .onChange(of: searchText) { _, newValue in
+            performSearch(newValue)
+        }
+    }
+
+    private var searchContent: some View {
         ScrollView {
             if searchText.isEmpty {
                 ContentUnavailableView {
@@ -118,17 +126,7 @@ struct SearchResultsView: View {
                 .padding(.vertical, 16)
             }
         }
-        .background(colors.background)
         .navigationTitle("Search")
-        .onChange(of: searchText) { _, newValue in
-            performSearch(newValue)
-        }
-        .sheet(item: $selectedAlbum) { album in
-            AlbumDetailView(album: album)
-                .environment(playerState)
-                .environment(syncManager)
-                .frame(minWidth: 500, minHeight: 400)
-        }
     }
 
     private func performSearch(_ query: String) {

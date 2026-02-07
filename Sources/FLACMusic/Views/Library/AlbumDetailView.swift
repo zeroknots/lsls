@@ -7,7 +7,6 @@ struct AlbumDetailView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
-    @Environment(\.dismiss) private var dismiss
     @State private var tracks: [TrackInfo] = []
     @State private var artist: Artist?
 
@@ -17,9 +16,9 @@ struct AlbumDetailView: View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: 20) {
-                AlbumArtView(album: album, size: 220)
+                AlbumArtView(album: album, size: 200)
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(album.title)
                         .font(.system(size: theme.typography.titleSize, weight: .bold))
                         .foregroundStyle(colors.textPrimary)
@@ -30,15 +29,15 @@ struct AlbumDetailView: View {
                             .foregroundStyle(colors.textSecondary)
                     }
 
-                    if let year = album.year {
-                        Text(String(year))
-                            .font(.system(size: theme.typography.captionSize))
+                    HStack(spacing: 8) {
+                        if let year = album.year {
+                            Text(String(year))
+                                .foregroundStyle(colors.textTertiary)
+                        }
+                        Text("\(tracks.count) songs · \(totalDuration)")
                             .foregroundStyle(colors.textTertiary)
                     }
-
-                    Text("\(tracks.count) songs · \(totalDuration)")
-                        .font(.system(size: theme.typography.captionSize))
-                        .foregroundStyle(colors.textSecondary)
+                    .font(.system(size: theme.typography.captionSize))
 
                     HStack(spacing: 12) {
                         Button("Play All") {

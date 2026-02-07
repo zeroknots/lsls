@@ -3,7 +3,6 @@ import GRDB
 
 struct AlbumGridView: View {
     @Binding var selectedAlbum: Album?
-    @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
@@ -62,12 +61,6 @@ struct AlbumGridView: View {
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadAlbums()
-        }
-        .sheet(item: $selectedAlbum) { album in
-            AlbumDetailView(album: album)
-                .environment(playerState)
-                .environment(syncManager)
-                .frame(minWidth: 500, minHeight: 400)
         }
     }
 
