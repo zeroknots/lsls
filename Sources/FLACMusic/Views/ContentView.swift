@@ -3,22 +3,24 @@ import SwiftUI
 struct ContentView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var selectedSection: SidebarSection? = .albums
     @State private var selectedAlbum: Album?
-    @State private var selectedArtist: Artist?
     @State private var searchText = ""
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            NavigationSplitView {
+            NavigationSplitView(columnVisibility: .constant(.doubleColumn)) {
                 SidebarView(selection: $selectedSection)
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 280)
             } detail: {
                 Group {
                     switch selectedSection {
                     case .albums:
                         AlbumGridView(selectedAlbum: $selectedAlbum)
                     case .artists:
-                        ArtistListView(selectedArtist: $selectedArtist)
+                        ArtistListView()
                     case .songs:
                         SongListView()
                     case .recentlyAdded:
@@ -29,9 +31,10 @@ struct ContentView: View {
                         SearchResultsView(searchText: $searchText)
                     case .none:
                         Text("Select a section")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(colors.textSecondary)
                     }
                 }
+                .background(colors.background)
             }
             .searchable(text: $searchText, prompt: "Search music")
             .onChange(of: searchText) { _, newValue in
@@ -45,19 +48,22 @@ struct ContentView: View {
             if playerState.currentTrack != nil {
                 NowPlayingBar()
                     .environment(playerState)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             if libraryManager.isImporting {
                 VStack(spacing: 6) {
                     ProgressView(value: libraryManager.importProgress)
+                        .tint(colors.accent)
                     Text(libraryManager.importStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.textSecondary)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(colors.backgroundTertiary.opacity(0.95))
+                .clipShape(RoundedRectangle(cornerRadius: theme.shapes.cardRadius))
+                .shadow(color: .black.opacity(0.2), radius: 8)
                 .padding(.bottom, playerState.currentTrack != nil ? 80 : 20)
             }
         }

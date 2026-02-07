@@ -5,10 +5,18 @@ struct AlbumGridView: View {
     @Binding var selectedAlbum: Album?
     @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var albums: [AlbumInfo] = []
 
     private let db = DatabaseManager.shared
-    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 200), spacing: 20)]
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(
+            minimum: theme.spacing.gridItemSize,
+            maximum: theme.spacing.gridItemSize + 30
+        ), spacing: theme.spacing.gridSpacing)]
+    }
 
     var body: some View {
         ScrollView {
@@ -18,19 +26,20 @@ struct AlbumGridView: View {
                 } description: {
                     Text("Import a folder to get started")
                 }
+                .foregroundStyle(colors.textSecondary)
                 .padding(.top, 100)
             } else {
-                LazyVGrid(columns: columns, spacing: 24) {
+                LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
                     ForEach(albums) { albumInfo in
-                        AlbumCard(albumInfo: albumInfo)
-                            .onTapGesture {
-                                selectedAlbum = albumInfo.album
-                            }
+                        AlbumCard(albumInfo: albumInfo) {
+                            selectedAlbum = albumInfo.album
+                        }
                     }
                 }
-                .padding(24)
+                .padding(theme.spacing.contentPadding)
             }
         }
+        .background(colors.background)
         .navigationTitle("Albums")
         .task {
             loadAlbums()
@@ -53,27 +62,5 @@ struct AlbumGridView: View {
         } catch {
             print("Failed to load albums: \(error)")
         }
-    }
-}
-
-private struct AlbumCard: View {
-    let albumInfo: AlbumInfo
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            AlbumArtView(album: albumInfo.album, size: 170)
-
-            Text(albumInfo.album.title)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-
-            if let artist = albumInfo.artist {
-                Text(artist.name)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(width: 170)
     }
 }

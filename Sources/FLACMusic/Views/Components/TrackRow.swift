@@ -6,6 +6,10 @@ struct TrackRow: View {
     let isPlaying: Bool
     var onPlay: () -> Void
 
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
     init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, onPlay: @escaping () -> Void) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
@@ -19,39 +23,42 @@ struct TrackRow: View {
             Group {
                 if isPlaying {
                     Image(systemName: "speaker.wave.2.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(colors.accent)
+                } else if isHovered {
+                    Image(systemName: "play.fill")
+                        .foregroundStyle(colors.textSecondary)
                 } else if let num = trackInfo.track.trackNumber {
                     Text("\(num)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colors.textTertiary)
                 } else {
                     Text("-")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colors.textTertiary)
                 }
             }
             .frame(width: 30, alignment: .trailing)
-            .font(.subheadline.monospacedDigit())
+            .font(.system(size: theme.typography.captionSize).monospacedDigit())
 
             // Title and artist
             VStack(alignment: .leading, spacing: 2) {
                 Text(trackInfo.track.title)
                     .lineLimit(1)
-                    .foregroundStyle(isPlaying ? Color.accentColor : .primary)
+                    .foregroundStyle(isPlaying ? colors.accent : colors.textPrimary)
 
                 HStack(spacing: 4) {
                     if let artist = trackInfo.artist {
                         Text(artist.name)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(colors.textSecondary)
                     }
                     if showAlbum, let album = trackInfo.album {
                         if trackInfo.artist != nil {
                             Text("·")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(colors.textTertiary)
                         }
                         Text(album.title)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(colors.textTertiary)
                     }
                 }
-                .font(.subheadline)
+                .font(.system(size: theme.typography.captionSize))
                 .lineLimit(1)
             }
 
@@ -59,12 +66,18 @@ struct TrackRow: View {
 
             // Duration
             Text(TimeFormatter.format(trackInfo.track.duration))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(.system(size: theme.typography.captionSize).monospacedDigit())
+                .foregroundStyle(colors.textTertiary)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: theme.shapes.sidebarItemRadius)
+                .fill(isHovered ? colors.surfaceHover : .clear)
+        )
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
         .onTapGesture(count: 2) {
             onPlay()
         }
