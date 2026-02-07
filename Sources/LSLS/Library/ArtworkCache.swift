@@ -11,7 +11,7 @@ final class ArtworkCache {
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        cacheDir = appSupport.appendingPathComponent("FLACMusic/Artwork", isDirectory: true)
+        cacheDir = appSupport.appendingPathComponent("LSLS/Artwork", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
     }
 

@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 import Testing
 
-@testable import FLACMusic
+@testable import LSLS
 
 @Suite("Import Integration")
 struct ImportIntegrationTests {

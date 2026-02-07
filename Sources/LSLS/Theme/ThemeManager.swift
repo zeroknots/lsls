@@ -15,7 +15,7 @@ final class ThemeManager {
 
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        self.configDir = home.appendingPathComponent(".config/flacmusic", isDirectory: true)
+        self.configDir = home.appendingPathComponent(".config/lsls", isDirectory: true)
         self.configFile = configDir.appendingPathComponent("theme.json")
 
         let loaded = ThemeManager.loadTheme(from: configFile)

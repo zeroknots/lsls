@@ -25,7 +25,7 @@ actor PlexAPIClient {
 
     // MARK: - Static Properties
 
-    static let productName = "FLACMusic"
+    static let productName = "LSLS"
     static let productVersion = "1.0"
 
     // MARK: - Properties

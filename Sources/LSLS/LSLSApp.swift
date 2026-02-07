@@ -2,13 +2,14 @@ import AppKit
 import SwiftUI
 
 @main
-struct FLACMusicApp: App {
+struct LSLSApp: App {
     @State private var databaseManager = DatabaseManager.shared
     @State private var playerState = PlayerState()
     @State private var libraryManager = LibraryManager()
     @State private var themeManager = ThemeManager()
     @State private var syncManager = SyncManager()
     @State private var plexState = PlexConnectionState()
+    @State private var updateChecker = UpdateChecker()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -28,10 +29,17 @@ struct FLACMusicApp: App {
                 .preferredColorScheme(themeManager.preferredColorScheme)
                 .accentColor(themeManager.resolvedColors.accent)
                 .frame(minWidth: 900, minHeight: 600)
+                .task { updateChecker.checkForUpdates() }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updateChecker.checkForUpdates(silent: false)
+                }
+            }
+
             CommandMenu("Playback") {
                 Button("Play / Pause") {
                     playerState.togglePlayPause()

@@ -57,7 +57,7 @@ final class PlexAuth {
         request.setValue(PlexAPIClient.productName, forHTTPHeaderField: "X-Plex-Product")
         request.setValue(PlexAPIClient.productVersion, forHTTPHeaderField: "X-Plex-Version")
 
-        let bodyString = "strong=true&X-Plex-Product=FLACMusic&X-Plex-Client-Identifier=\(clientIdentifier)"
+        let bodyString = "strong=true&X-Plex-Product=LSLS&X-Plex-Client-Identifier=\(clientIdentifier)"
         request.httpBody = bodyString.data(using: .utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -78,7 +78,7 @@ final class PlexAuth {
     }
 
     func openAuthPage(pin: PlexPin) {
-        let urlString = "https://app.plex.tv/auth#?clientID=\(clientIdentifier)&code=\(pin.code)&context%5Bdevice%5D%5Bproduct%5D=FLACMusic"
+        let urlString = "https://app.plex.tv/auth#?clientID=\(clientIdentifier)&code=\(pin.code)&context%5Bdevice%5D%5Bproduct%5D=LSLS"
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
     }
