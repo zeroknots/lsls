@@ -6,7 +6,6 @@ struct PlexSettingsView: View {
     @Environment(\.theme) private var theme
     @State private var isAuthenticating = false
     @State private var authError: String?
-    @State private var servers: [PlexServer] = []
 
     var body: some View {
         ScrollView {
@@ -29,6 +28,10 @@ struct PlexSettingsView: View {
                     connectedView
                 } else if isAuthenticating {
                     authenticatingView
+                } else if case .connecting = plexState.connectionStatus {
+                    connectingView
+                } else if case .error(let message) = plexState.connectionStatus {
+                    errorView(message: message)
                 } else {
                     disconnectedView
                 }
@@ -55,15 +58,6 @@ struct PlexSettingsView: View {
 
                 if let server = plexState.selectedServer {
                     LabeledContent {
-                        Text(server.name)
-                            .foregroundStyle(colors.textPrimary)
-                    } label: {
-                        Text("Server")
-                            .foregroundStyle(colors.textSecondary)
-                    }
-                    .font(.system(size: theme.typography.bodySize))
-
-                    LabeledContent {
                         Text("\(server.host):\(server.port)")
                             .foregroundStyle(colors.textPrimary)
                     } label: {
@@ -73,19 +67,23 @@ struct PlexSettingsView: View {
                     .font(.system(size: theme.typography.bodySize))
                 }
 
-                if let library = plexState.selectedLibrary {
-                    LabeledContent {
-                        Text(library.title)
-                            .foregroundStyle(colors.textPrimary)
-                    } label: {
-                        Text("Library")
-                            .foregroundStyle(colors.textSecondary)
+                let serverNames = plexState.uniqueServerNames
+                if serverNames.count > 1 {
+                    Picker("Server", selection: Binding(
+                        get: { plexState.selectedServer?.name ?? "" },
+                        set: { newName in
+                            Task { await plexState.switchServer(named: newName) }
+                        }
+                    )) {
+                        ForEach(serverNames, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
                     .font(.system(size: theme.typography.bodySize))
                 }
 
                 if plexState.musicLibraries.count > 1 {
-                    Picker("Music Library", selection: Binding(
+                    Picker("Library", selection: Binding(
                         get: { plexState.selectedLibrary },
                         set: { newValue in
                             plexState.selectedLibrary = newValue
@@ -96,6 +94,7 @@ struct PlexSettingsView: View {
                             Text(library.title).tag(Optional(library))
                         }
                     }
+                    .font(.system(size: theme.typography.bodySize))
                 }
             }
             .padding(16)
@@ -104,31 +103,8 @@ struct PlexSettingsView: View {
                     .fill(colors.surface)
             )
 
-            if servers.count > 1 {
-                Picker("Server", selection: Binding(
-                    get: { plexState.selectedServer },
-                    set: { newValue in
-                        if let newServer = newValue {
-                            Task {
-                                plexState.selectedServer = newServer
-                                let libraries = try? await plexState.auth.getMusicLibraries(
-                                    server: newServer)
-                                plexState.musicLibraries = libraries ?? []
-                                plexState.selectedLibrary = plexState.musicLibraries.first
-                                plexState.saveState()
-                            }
-                        }
-                    }
-                )) {
-                    ForEach(servers) { server in
-                        Text(server.name).tag(Optional(server))
-                    }
-                }
-            }
-
             Button("Disconnect") {
                 plexState.disconnect()
-                servers = []
             }
             .buttonStyle(AccentOutlineButtonStyle())
         }
@@ -145,6 +121,40 @@ struct PlexSettingsView: View {
                 .font(.system(size: theme.typography.captionSize))
                 .foregroundStyle(colors.textTertiary)
                 .multilineTextAlignment(.center)
+        }
+    }
+
+    private var connectingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Connecting to server...")
+                .font(.system(size: theme.typography.bodySize))
+                .foregroundStyle(colors.textSecondary)
+            Text("Discovering servers and loading music libraries.")
+                .font(.system(size: theme.typography.captionSize))
+                .foregroundStyle(colors.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private func errorView(message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 32))
+                .foregroundStyle(.red)
+            Text("Connection failed")
+                .font(.system(size: theme.typography.bodySize, weight: .semibold))
+                .foregroundStyle(colors.textPrimary)
+            Text(message)
+                .font(.system(size: theme.typography.captionSize))
+                .foregroundStyle(colors.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Try Again") {
+                plexState.disconnect()
+                startAuth()
+            }
+            .buttonStyle(AccentFilledButtonStyle())
         }
     }
 
@@ -168,12 +178,9 @@ struct PlexSettingsView: View {
                 let pin = try await plexState.auth.requestPin()
                 plexState.auth.openAuthPage(pin: pin)
                 let token = try await plexState.auth.pollForToken(pinId: pin.id)
-
-                let discoveredServers = try await plexState.auth.discoverServers(token: token)
-                servers = discoveredServers
+                isAuthenticating = false
 
                 await plexState.connect(token: token)
-                isAuthenticating = false
             } catch {
                 authError = error.localizedDescription
                 isAuthenticating = false

@@ -36,7 +36,10 @@ actor PlexAPIClient {
     // MARK: - Initialization
 
     init() {
-        self.session = URLSession(configuration: .default)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForResource = 15
+        config.timeoutIntervalForRequest = 10
+        self.session = URLSession(configuration: config)
 
         let key = "PlexClientIdentifier"
         if let existing = UserDefaults.standard.string(forKey: key) {

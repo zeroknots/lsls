@@ -146,11 +146,9 @@ final class PlexAuth {
 
         let serverResources = resources.filter { $0.provides.contains("server") }
 
-        let servers: [PlexServer] = serverResources.compactMap { resource in
-            guard let connection = bestConnection(from: resource.connections) else {
-                return nil
-            }
-            return serverFromConnection(connection, name: resource.name, token: token)
+        let servers: [PlexServer] = serverResources.flatMap { resource -> [PlexServer] in
+            let sorted = rankedConnections(from: resource.connections)
+            return sorted.compactMap { serverFromConnection($0, name: resource.name, token: token) }
         }
 
         guard !servers.isEmpty else {
@@ -167,21 +165,19 @@ final class PlexAuth {
 
     // MARK: - Private Helpers
 
-    private func bestConnection(from connections: [PlexConnection]) -> PlexConnection? {
-        // Prefer non-local HTTPS connections
-        if let remote = connections.first(where: { !$0.local && $0.connectionProtocol == "https" }) {
-            return remote
+    private func rankedConnections(from connections: [PlexConnection]) -> [PlexConnection] {
+        connections.sorted { a, b in
+            // Prefer non-local HTTPS, then local HTTPS, then non-local HTTP, then local HTTP
+            func score(_ c: PlexConnection) -> Int {
+                switch (c.connectionProtocol == "https", !c.local) {
+                case (true, true): return 0
+                case (true, false): return 1
+                case (false, true): return 2
+                case (false, false): return 3
+                }
+            }
+            return score(a) < score(b)
         }
-        // Fall back to any HTTPS connection
-        if let https = connections.first(where: { $0.connectionProtocol == "https" }) {
-            return https
-        }
-        // Fall back to any non-local connection
-        if let remote = connections.first(where: { !$0.local }) {
-            return remote
-        }
-        // Fall back to first available
-        return connections.first
     }
 
     private func serverFromConnection(
