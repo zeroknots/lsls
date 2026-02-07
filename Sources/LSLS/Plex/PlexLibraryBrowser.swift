@@ -78,7 +78,10 @@ final class PlexLibraryBrowser {
             discNumber: plexTrack.parentIndex,
             duration: plexTrack.durationSeconds,
             fileSize: nil,
-            dateAdded: Date()
+            dateAdded: Date(),
+            playCount: 0,
+            lastPlayedAt: nil,
+            isFavorite: false
         )
 
         let albumModel: Album? = {

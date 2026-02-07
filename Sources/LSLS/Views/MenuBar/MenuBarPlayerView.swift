@@ -4,6 +4,9 @@ import SwiftUI
 struct MenuBarPlayerView: View {
     @Environment(PlayerState.self) private var playerState
 
+    @State private var isFavorite = false
+    private let db = DatabaseManager.shared
+
     var body: some View {
         VStack(spacing: 0) {
             if let track = playerState.currentTrack {
@@ -20,6 +23,12 @@ struct MenuBarPlayerView: View {
         .frame(width: 300)
         .padding(.vertical, 12)
         .preferredColorScheme(.dark)
+        .onChange(of: playerState.currentTrack) {
+            loadFavoriteState()
+        }
+        .task {
+            loadFavoriteState()
+        }
     }
 
     // MARK: - Now Playing
@@ -146,6 +155,15 @@ struct MenuBarPlayerView: View {
                     .foregroundStyle(.primary)
             }
             .buttonStyle(.plain)
+
+            Button {
+                toggleFavorite()
+            } label: {
+                Image(systemName: isFavorite ? "star.fill" : "star")
+                    .font(.system(size: 14))
+                    .foregroundStyle(isFavorite ? .yellow : .secondary)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -267,6 +285,24 @@ struct MenuBarPlayerView: View {
         case .off, .all: return "repeat"
         case .one: return "repeat.1"
         }
+    }
+
+    private func loadFavoriteState() {
+        guard let trackId = playerState.currentTrack?.track.id else {
+            isFavorite = false
+            return
+        }
+        isFavorite = (try? db.dbQueue.read { db in
+            try LibraryQueries.isFavorite(trackId: trackId, in: db)
+        }) ?? false
+    }
+
+    private func toggleFavorite() {
+        guard let trackId = playerState.currentTrack?.track.id else { return }
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
+        }
+        isFavorite.toggle()
     }
 }
 

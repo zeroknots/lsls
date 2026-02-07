@@ -24,31 +24,7 @@ struct SongListView: View {
                 .foregroundStyle(colors.textSecondary)
             } else {
                 ForEach(tracks) { trackInfo in
-                    TrackRow(
-                        trackInfo: trackInfo,
-                        isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
-                        isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false,
-                        playlists: playlists
-                    ) {
-                        playerState.play(track: trackInfo, fromQueue: tracks)
-                    } onAddToQueue: {
-                        playerState.addToQueueEnd(trackInfo)
-                    } onSyncToggle: {
-                        guard let trackId = trackInfo.track.id else { return }
-                        if syncManager.isTrackInSyncList(trackId) {
-                            if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
-                                syncManager.removeSyncItem(item)
-                            }
-                        } else {
-                            syncManager.addTrack(trackId)
-                        }
-                    } onAddToPlaylist: { playlist in
-                        addTrackToPlaylist(trackInfo, playlist: playlist)
-                    } onDelete: {
-                        trackToDelete = trackInfo
-                    } onEdit: {
-                        trackToEdit = trackInfo
-                    }
+                    trackRow(for: trackInfo)
                 }
             }
         }
@@ -84,6 +60,39 @@ struct SongListView: View {
         }
     }
 
+    @ViewBuilder
+    private func trackRow(for trackInfo: TrackInfo) -> some View {
+        let isPlaying = playerState.currentTrack?.track.id == trackInfo.track.id
+        let isInSyncList = trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
+        let isFavorite = trackInfo.track.isFavorite
+
+        TrackRow(
+            trackInfo: trackInfo,
+            isPlaying: isPlaying,
+            isInSyncList: isInSyncList,
+            isFavorite: isFavorite,
+            playlists: playlists,
+            onPlay: { playerState.play(track: trackInfo, fromQueue: tracks) },
+            onAddToQueue: { playerState.addToQueueEnd(trackInfo) },
+            onSyncToggle: { handleSyncToggle(trackInfo) },
+            onAddToPlaylist: { playlist in addTrackToPlaylist(trackInfo, playlist: playlist) },
+            onDelete: { trackToDelete = trackInfo },
+            onEdit: { trackToEdit = trackInfo },
+            onFavoriteToggle: { toggleFavorite(trackInfo) }
+        )
+    }
+
+    private func handleSyncToggle(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        if syncManager.isTrackInSyncList(trackId) {
+            if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
+                syncManager.removeSyncItem(item)
+            }
+        } else {
+            syncManager.addTrack(trackId)
+        }
+    }
+
     private func loadTracks() {
         do {
             tracks = try db.dbQueue.read { db in
@@ -113,6 +122,14 @@ struct SongListView: View {
         } catch {
             print("Failed to add track to playlist: \(error)")
         }
+    }
+
+    private func toggleFavorite(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
+        }
+        loadTracks()
     }
 
     private func deleteTrack(_ trackInfo: TrackInfo) {

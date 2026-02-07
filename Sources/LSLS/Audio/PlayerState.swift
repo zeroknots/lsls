@@ -31,6 +31,7 @@ final class PlayerState {
 
     init() {
         engine.onTrackFinished = { [weak self] in
+            self?.recordPlay()
             self?.playNext()
         }
         nowPlayingManager = NowPlayingManager(playerState: self)
@@ -195,6 +196,14 @@ final class PlayerState {
             MainActor.assumeIsolated {
                 self?.updateNowPlaying()
             }
+        }
+    }
+
+    private func recordPlay() {
+        guard let trackId = currentTrack?.track.id else { return }
+        let db = DatabaseManager.shared
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.recordPlay(trackId: trackId, in: dbConn)
         }
     }
 }

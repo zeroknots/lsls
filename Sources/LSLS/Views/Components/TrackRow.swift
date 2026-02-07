@@ -7,21 +7,24 @@ struct TrackRow: View {
     var onPlay: () -> Void
     var onSyncToggle: (() -> Void)?
     var isInSyncList: Bool
+    var isFavorite: Bool
     var playlists: [Playlist]
     var onAddToPlaylist: ((Playlist) -> Void)?
     var onAddToQueue: (() -> Void)?
     var onDelete: (() -> Void)?
     var onEdit: (() -> Void)?
+    var onFavoriteToggle: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, isFavorite: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil, onFavoriteToggle: (() -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
         self.isInSyncList = isInSyncList
+        self.isFavorite = isFavorite
         self.playlists = playlists
         self.onPlay = onPlay
         self.onAddToQueue = onAddToQueue
@@ -29,6 +32,7 @@ struct TrackRow: View {
         self.onAddToPlaylist = onAddToPlaylist
         self.onDelete = onDelete
         self.onEdit = onEdit
+        self.onFavoriteToggle = onFavoriteToggle
     }
 
     var body: some View {
@@ -78,6 +82,17 @@ struct TrackRow: View {
 
             Spacer()
 
+            if isFavorite || isHovered {
+                Button {
+                    onFavoriteToggle?()
+                } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .foregroundStyle(isFavorite ? .yellow : colors.textTertiary)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+            }
+
             // Duration
             Text(TimeFormatter.format(trackInfo.track.duration))
                 .font(.system(size: theme.typography.captionSize).monospacedDigit())
@@ -100,6 +115,12 @@ struct TrackRow: View {
             if let onEdit {
                 Button("Edit...") {
                     onEdit()
+                }
+            }
+
+            if let onFavoriteToggle {
+                Button(isFavorite ? "Unfavorite" : "Favorite") {
+                    onFavoriteToggle()
                 }
             }
 

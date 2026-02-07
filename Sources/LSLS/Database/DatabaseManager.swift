@@ -95,6 +95,29 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("v4") { db in
+            try db.alter(table: "track") { t in
+                t.add(column: "playCount", .integer).notNull().defaults(to: 0)
+                t.add(column: "lastPlayedAt", .datetime)
+                t.add(column: "isFavorite", .boolean).notNull().defaults(to: false)
+            }
+
+            try db.create(table: "smartPlaylist") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("dateCreated", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "smartPlaylistRule") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("smartPlaylistId", .integer).notNull().references("smartPlaylist", onDelete: .cascade)
+                t.column("field", .text).notNull()
+                t.column("operator", .text).notNull()
+                t.column("value", .text).notNull()
+                t.column("position", .integer).notNull()
+            }
+        }
+
         try migrator.migrate(dbQueue)
     }
 }
