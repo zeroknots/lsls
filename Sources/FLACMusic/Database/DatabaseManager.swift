@@ -71,6 +71,30 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("v3") { db in
+            try db.create(table: "syncSettings") { t in
+                t.primaryKey("key", .text)
+                t.column("value", .text).notNull()
+            }
+
+            try db.create(table: "syncItem") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("itemType", .text).notNull()
+                t.column("trackId", .integer).references("track", onDelete: .cascade)
+                t.column("albumId", .integer).references("album", onDelete: .cascade)
+                t.column("artistId", .integer).references("artist", onDelete: .cascade)
+                t.column("dateAdded", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "syncLog") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("trackId", .integer).notNull().references("track", onDelete: .cascade).unique()
+                t.column("devicePath", .text).notNull()
+                t.column("syncedAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                t.column("fileSize", .integer).notNull()
+            }
+        }
+
         try migrator.migrate(dbQueue)
     }
 }

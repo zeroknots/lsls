@@ -8,12 +8,14 @@ enum SidebarSection: Hashable {
     case recentlyAdded
     case search
     case playlist(Playlist)
+    case syncList
 }
 
 struct SidebarView: View {
     @Binding var selection: SidebarSection?
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var playlists: [Playlist] = []
     @State private var showNewPlaylist = false
     @State private var newPlaylistName = ""
@@ -29,6 +31,34 @@ struct SidebarView: View {
                 sidebarRow("Recently Added", icon: "clock", tag: .recentlyAdded)
             } header: {
                 Text("Library")
+                    .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+                    .textCase(nil)
+            }
+
+            Section {
+                Label {
+                    HStack {
+                        Text("Sync List")
+                        Spacer()
+                        if !syncManager.syncItems.isEmpty {
+                            Text("\(syncManager.syncItems.count)")
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(.quaternary)
+                                .clipShape(Capsule())
+                        }
+                        Circle()
+                            .fill(syncManager.isDeviceConnected ? .green : .gray)
+                            .frame(width: 8, height: 8)
+                    }
+                } icon: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+                .tag(SidebarSection.syncList)
+            } header: {
+                Text("Rockbox")
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
                     .textCase(nil)

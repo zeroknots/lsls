@@ -5,16 +5,20 @@ struct TrackRow: View {
     let showAlbum: Bool
     let isPlaying: Bool
     var onPlay: () -> Void
+    var onSyncToggle: (() -> Void)?
+    var isInSyncList: Bool
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, onPlay: @escaping () -> Void) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, onPlay: @escaping () -> Void, onSyncToggle: (() -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
+        self.isInSyncList = isInSyncList
         self.onPlay = onPlay
+        self.onSyncToggle = onSyncToggle
     }
 
     var body: some View {
@@ -80,6 +84,13 @@ struct TrackRow: View {
         .animation(.easeOut(duration: 0.15), value: isHovered)
         .onTapGesture(count: 2) {
             onPlay()
+        }
+        .contextMenu {
+            if let onSyncToggle {
+                Button(isInSyncList ? "Remove from Sync List" : "Add to Sync List") {
+                    onSyncToggle()
+                }
+            }
         }
     }
 }
