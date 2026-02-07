@@ -13,6 +13,10 @@ struct ArtistListView: View {
     @State private var albumTracks: [Int64: [TrackInfo]] = [:]
     @Binding var selectedAlbum: Album?
     @State private var artistFirstAlbum: [Int64: Album] = [:]
+    @State private var playlists: [Playlist] = []
+    @State private var trackToEdit: TrackInfo? = nil
+    @State private var trackToDelete: TrackInfo? = nil
+    @State private var albumToDelete: AlbumInfo? = nil
 
     private let db = DatabaseManager.shared
 
@@ -21,12 +25,46 @@ struct ArtistListView: View {
         .background(colors.background)
         .task {
             loadArtists()
+            loadPlaylists()
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadArtists()
         }
         .onChange(of: selectedArtist) {
             loadAlbums()
+        }
+        .sheet(item: $trackToEdit) { trackInfo in
+            TrackEditView(trackInfo: trackInfo) {
+                loadAlbums()
+            }
+        }
+        .alert("Delete Track?", isPresented: Binding(
+            get: { trackToDelete != nil },
+            set: { if !$0 { trackToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { trackToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let track = trackToDelete {
+                    deleteTrack(track)
+                    trackToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will remove \"\(trackToDelete?.track.title ?? "")\" from your library and all playlists.")
+        }
+        .alert("Delete Album?", isPresented: Binding(
+            get: { albumToDelete != nil },
+            set: { if !$0 { albumToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { albumToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let albumInfo = albumToDelete, let albumId = albumInfo.album.id {
+                    deleteAlbum(albumId)
+                    albumToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will delete \"\(albumToDelete?.album.title ?? "")\" and all its tracks.")
         }
     }
 
@@ -138,6 +176,27 @@ struct ArtistListView: View {
             .padding(.horizontal, theme.spacing.contentPadding)
             .padding(.top, 16)
             .padding(.bottom, 8)
+            .contextMenu {
+                if let albumId = albumInfo.album.id {
+                    if syncManager.isAlbumInSyncList(albumId) {
+                        Button("Remove Album from Sync List", role: .destructive) {
+                            if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == albumId }) {
+                                syncManager.removeSyncItem(item)
+                            }
+                        }
+                    } else {
+                        Button("Add Album to Sync List") {
+                            syncManager.addAlbum(albumId)
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Delete Album", role: .destructive) {
+                        albumToDelete = albumInfo
+                    }
+                }
+            }
 
             // Track list for this album
             ForEach(tracks) { trackInfo in
@@ -145,7 +204,8 @@ struct ArtistListView: View {
                     trackInfo: trackInfo,
                     showAlbum: false,
                     isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
-                    isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
+                    isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false,
+                    playlists: playlists
                 ) {
                     playerState.play(track: trackInfo, fromQueue: allArtistTracks)
                 } onSyncToggle: {
@@ -157,6 +217,12 @@ struct ArtistListView: View {
                     } else {
                         syncManager.addTrack(trackId)
                     }
+                } onAddToPlaylist: { playlist in
+                    addTrackToPlaylist(trackInfo, playlist: playlist)
+                } onDelete: {
+                    trackToDelete = trackInfo
+                } onEdit: {
+                    trackToEdit = trackInfo
                 }
             }
             .padding(.horizontal, 8)
@@ -279,6 +345,53 @@ struct ArtistListView: View {
             albumTracks = tracks
         } catch {
             print("Failed to load albums: \(error)")
+        }
+    }
+
+    private func loadPlaylists() {
+        do {
+            playlists = try db.dbQueue.read { db in
+                try LibraryQueries.allPlaylists(in: db)
+            }
+        } catch {
+            print("Failed to load playlists: \(error)")
+        }
+    }
+
+    private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
+        guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+            }
+        } catch {
+            print("Failed to add track to playlist: \(error)")
+        }
+    }
+
+    private func deleteTrack(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        if playerState.currentTrack?.track.id == trackId {
+            playerState.playNext()
+        }
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.deleteTrack(trackId, in: dbConn)
+            }
+            loadAlbums()
+        } catch {
+            print("Failed to delete track: \(error)")
+        }
+    }
+
+    private func deleteAlbum(_ albumId: Int64) {
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.deleteAlbum(albumId, in: dbConn)
+            }
+            loadAlbums()
+        } catch {
+            print("Failed to delete album: \(error)")
         }
     }
 }

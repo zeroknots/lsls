@@ -203,6 +203,98 @@ enum LibraryQueries {
     static func allSyncLogs(in db: Database) throws -> [SyncLog] {
         try SyncLog.fetchAll(db)
     }
+
+    // MARK: - Mutations
+
+    static func deleteTrack(_ trackId: Int64, in db: Database) throws {
+        _ = try Track.deleteOne(db, id: trackId)
+        try deleteOrphans(in: db)
+    }
+
+    static func deleteAlbum(_ albumId: Int64, in db: Database) throws {
+        // Delete tracks first (track→album FK is SET NULL, not CASCADE)
+        try Track
+            .filter(Track.Columns.albumId == albumId)
+            .deleteAll(db)
+        _ = try Album.deleteOne(db, id: albumId)
+        try deleteOrphans(in: db)
+    }
+
+    static func updateTrack(
+        _ trackId: Int64,
+        title: String,
+        artistId: Int64?,
+        in db: Database
+    ) throws {
+        guard var track = try Track.fetchOne(db, id: trackId) else { return }
+        track.title = title
+        track.artistId = artistId
+        try track.update(db)
+        try deleteOrphans(in: db)
+    }
+
+    static func deleteOrphans(in db: Database) throws {
+        // For albums where all tracks share one artist different from the album's artist,
+        // merge tracks into an existing album (same title + artist) or re-assign the album
+        let staleAlbums = try Row.fetchAll(db, sql: """
+            SELECT a.id, a.title,
+                   (SELECT DISTINCT t.artistId FROM track t WHERE t.albumId = a.id AND t.artistId IS NOT NULL) as newArtistId
+            FROM album a
+            WHERE (SELECT COUNT(DISTINCT t.artistId) FROM track t WHERE t.albumId = a.id AND t.artistId IS NOT NULL) = 1
+              AND a.artistId != (SELECT DISTINCT t.artistId FROM track t WHERE t.albumId = a.id AND t.artistId IS NOT NULL)
+            """)
+        for row in staleAlbums {
+            let oldAlbumId: Int64 = row["id"]
+            let title: String = row["title"]
+            let newArtistId: Int64 = row["newArtistId"]
+
+            // Check if target album already exists
+            if let targetAlbum = try Album
+                .filter(Album.Columns.title == title)
+                .filter(Album.Columns.artistId == newArtistId)
+                .fetchOne(db) {
+                // Merge: move tracks to existing album
+                try db.execute(sql: "UPDATE track SET albumId = ? WHERE albumId = ?",
+                               arguments: [targetAlbum.id, oldAlbumId])
+                _ = try Album.deleteOne(db, id: oldAlbumId)
+            } else {
+                // No conflict: just update the album's artist
+                try db.execute(sql: "UPDATE album SET artistId = ? WHERE id = ?",
+                               arguments: [newArtistId, oldAlbumId])
+            }
+        }
+
+        // Delete albums that have no tracks
+        try db.execute(sql: """
+            DELETE FROM album
+            WHERE id NOT IN (SELECT DISTINCT albumId FROM track WHERE albumId IS NOT NULL)
+            """)
+        // Delete artists that have no tracks and no albums
+        try db.execute(sql: """
+            DELETE FROM artist
+            WHERE id NOT IN (SELECT DISTINCT artistId FROM track WHERE artistId IS NOT NULL)
+              AND id NOT IN (SELECT DISTINCT artistId FROM album WHERE artistId IS NOT NULL)
+            """)
+    }
+
+    static func addTrackToPlaylist(
+        trackId: Int64,
+        playlistId: Int64,
+        in db: Database
+    ) throws {
+        let maxPosition = try Int.fetchOne(
+            db,
+            PlaylistTrack
+                .filter(PlaylistTrack.Columns.playlistId == playlistId)
+                .select(max(PlaylistTrack.Columns.position))
+        ) ?? 0
+        let pt = PlaylistTrack(
+            playlistId: playlistId,
+            trackId: trackId,
+            position: maxPosition + 1
+        )
+        try pt.insert(db)
+    }
 }
 
 // Column references

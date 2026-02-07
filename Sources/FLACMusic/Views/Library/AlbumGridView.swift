@@ -8,6 +8,7 @@ struct AlbumGridView: View {
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
     @State private var albums: [AlbumInfo] = []
+    @State private var albumToDelete: AlbumInfo? = nil
 
     private let db = DatabaseManager.shared
 
@@ -47,6 +48,12 @@ struct AlbumGridView: View {
                                         syncManager.addAlbum(albumId)
                                     }
                                 }
+
+                                Divider()
+
+                                Button("Delete Album", role: .destructive) {
+                                    albumToDelete = albumInfo
+                                }
                             }
                         }
                     }
@@ -61,6 +68,31 @@ struct AlbumGridView: View {
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadAlbums()
+        }
+        .alert("Delete Album?", isPresented: Binding(
+            get: { albumToDelete != nil },
+            set: { if !$0 { albumToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { albumToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let albumInfo = albumToDelete, let albumId = albumInfo.album.id {
+                    deleteAlbum(albumId)
+                    albumToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will delete \"\(albumToDelete?.album.title ?? "")\" and all its tracks.")
+        }
+    }
+
+    private func deleteAlbum(_ albumId: Int64) {
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.deleteAlbum(albumId, in: dbConn)
+            }
+            loadAlbums()
+        } catch {
+            print("Failed to delete album: \(error)")
         }
     }
 
