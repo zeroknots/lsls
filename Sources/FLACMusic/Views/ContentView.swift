@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(PlexConnectionState.self) private var plexState
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
@@ -32,6 +33,12 @@ struct ContentView: View {
                         SearchResultsView(searchText: $searchText)
                     case .syncList:
                         SyncListView()
+                    case .plexAlbums:
+                        PlexAlbumGridView()
+                    case .plexArtists:
+                        PlexArtistListView()
+                    case .plexSettings:
+                        PlexSettingsView()
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(colors.textSecondary)

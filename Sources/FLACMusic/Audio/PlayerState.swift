@@ -98,10 +98,19 @@ final class PlayerState {
     }
 
     private func loadAndPlay(_ track: TrackInfo) {
-        let url = URL(fileURLWithPath: track.track.filePath)
-        guard FileManager.default.fileExists(atPath: track.track.filePath) else {
-            playNext()
-            return
+        let url: URL
+        if track.track.filePath.hasPrefix("http") {
+            guard let streamURL = URL(string: track.track.filePath) else {
+                playNext()
+                return
+            }
+            url = streamURL
+        } else {
+            url = URL(fileURLWithPath: track.track.filePath)
+            guard FileManager.default.fileExists(atPath: track.track.filePath) else {
+                playNext()
+                return
+            }
         }
         currentTrack = track
         Task {
