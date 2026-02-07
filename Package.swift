@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "FLACMusic",
+    name: "LSLS",
     platforms: [
         .macOS(.v15)
     ],
@@ -12,16 +12,17 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "FLACMusic",
+            name: "LSLS",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources/FLACMusic"
+            path: "Sources/LSLS",
+            exclude: ["Resources"]
         ),
         .testTarget(
-            name: "FLACMusicTests",
-            dependencies: ["FLACMusic"],
-            path: "Tests/FLACMusicTests"
+            name: "LSLSTests",
+            dependencies: ["LSLS"],
+            path: "Tests/LSLSTests"
         ),
     ]
 )

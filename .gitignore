@@ -4,3 +4,5 @@
 DerivedData/
 .DS_Store
 .context/
+*.app
+*.dmg

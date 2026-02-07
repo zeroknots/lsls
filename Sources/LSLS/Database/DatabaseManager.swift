@@ -10,7 +10,7 @@ final class DatabaseManager: Sendable {
     private init() {
         do {
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            let dbDir = appSupport.appendingPathComponent("FLACMusic", isDirectory: true)
+            let dbDir = appSupport.appendingPathComponent("LSLS", isDirectory: true)
             try FileManager.default.createDirectory(at: dbDir, withIntermediateDirectories: true)
             let dbPath = dbDir.appendingPathComponent("library.sqlite").path
             dbQueue = try DatabaseQueue(path: dbPath)

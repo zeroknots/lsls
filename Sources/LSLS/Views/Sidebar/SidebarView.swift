@@ -113,7 +113,7 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(.ultraThinMaterial)
-        .navigationTitle("FLACMusic")
+        .navigationTitle("LSLS")
         .task {
             loadPlaylists()
         }

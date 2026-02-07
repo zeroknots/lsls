@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import FLACMusic
+@testable import LSLS
 
 @Suite("TimeFormatter")
 struct TimeFormatterTests {
