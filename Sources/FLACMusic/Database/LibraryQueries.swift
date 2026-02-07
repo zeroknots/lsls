@@ -1,0 +1,187 @@
+import Foundation
+import GRDB
+
+struct AlbumInfo: Decodable, FetchableRecord, Equatable, Hashable, Identifiable {
+    var album: Album
+    var artist: Artist?
+    var id: Int64? { album.id }
+}
+
+struct TrackInfo: Decodable, FetchableRecord, Equatable, Hashable, Identifiable {
+    var track: Track
+    var album: Album?
+    var artist: Artist?
+    var id: Int64? { track.id }
+}
+
+enum LibraryQueries {
+    static func allAlbums(in db: Database) throws -> [AlbumInfo] {
+        let request = Album
+            .including(optional: Album.artist)
+            .order(Album.Columns.title)
+        return try AlbumInfo.fetchAll(db, request)
+    }
+
+    static func allArtists(in db: Database) throws -> [Artist] {
+        try Artist
+            .order(Artist.Columns.name)
+            .fetchAll(db)
+    }
+
+    static func allTracks(in db: Database) throws -> [TrackInfo] {
+        let request = Track
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .order(Track.Columns.title)
+        return try TrackInfo.fetchAll(db, request)
+    }
+
+    static func tracksForAlbum(_ albumId: Int64, in db: Database) throws -> [TrackInfo] {
+        let request = Track
+            .filter(Track.Columns.albumId == albumId)
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .order(Track.Columns.discNumber, Track.Columns.trackNumber)
+        return try TrackInfo.fetchAll(db, request)
+    }
+
+    static func albumsForArtist(_ artistId: Int64, in db: Database) throws -> [AlbumInfo] {
+        let request = Album
+            .filter(Album.Columns.artistId == artistId)
+            .including(optional: Album.artist)
+            .order(Album.Columns.year)
+        return try AlbumInfo.fetchAll(db, request)
+    }
+
+    static func recentlyAdded(limit: Int = 50, in db: Database) throws -> [AlbumInfo] {
+        let recentAlbumIds = try Track
+            .select(Track.Columns.albumId, max(Track.Columns.dateAdded))
+            .group(Track.Columns.albumId)
+            .order(max(Track.Columns.dateAdded).desc)
+            .limit(limit)
+            .asRequest(of: Row.self)
+            .fetchAll(db)
+            .compactMap { $0[Track.Columns.albumId] as Int64? }
+
+        guard !recentAlbumIds.isEmpty else { return [] }
+
+        let request = Album
+            .filter(recentAlbumIds.contains(Album.Columns.id))
+            .including(optional: Album.artist)
+        return try AlbumInfo.fetchAll(db, request)
+    }
+
+    static func search(_ query: String, in db: Database) throws -> (tracks: [TrackInfo], albums: [AlbumInfo], artists: [Artist]) {
+        let pattern = "%\(query)%"
+
+        let tracks = try Track
+            .filter(Track.Columns.title.like(pattern))
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .limit(20)
+            .asRequest(of: TrackInfo.self)
+            .fetchAll(db)
+
+        let albums = try Album
+            .filter(Album.Columns.title.like(pattern))
+            .including(optional: Album.artist)
+            .limit(20)
+            .asRequest(of: AlbumInfo.self)
+            .fetchAll(db)
+
+        let artists = try Artist
+            .filter(Artist.Columns.name.like(pattern))
+            .limit(20)
+            .fetchAll(db)
+
+        return (tracks, albums, artists)
+    }
+
+    static func playlistTracks(_ playlistId: Int64, in db: Database) throws -> [TrackInfo] {
+        let request = Track
+            .joining(required: Track.hasOne(PlaylistTrack.self).filter(PlaylistTrack.Columns.playlistId == playlistId))
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .order(sql: "(SELECT position FROM playlistTrack WHERE playlistTrack.trackId = track.id AND playlistTrack.playlistId = ?)", arguments: [playlistId])
+        return try TrackInfo.fetchAll(db, request)
+    }
+
+    static func allPlaylists(in db: Database) throws -> [Playlist] {
+        try Playlist
+            .order(Playlist.Columns.name)
+            .fetchAll(db)
+    }
+
+    @discardableResult
+    static func findOrCreateArtist(name: String, in db: Database) throws -> Artist {
+        if let existing = try Artist.filter(Artist.Columns.name == name).fetchOne(db) {
+            return existing
+        }
+        var artist = Artist(name: name)
+        try artist.insert(db)
+        return artist
+    }
+
+    @discardableResult
+    static func findOrCreateAlbum(title: String, artistId: Int64?, in db: Database) throws -> Album {
+        var query = Album.filter(Album.Columns.title == title)
+        if let artistId {
+            query = query.filter(Album.Columns.artistId == artistId)
+        }
+        if let existing = try query.fetchOne(db) {
+            return existing
+        }
+        var album = Album(title: title, artistId: artistId)
+        try album.insert(db)
+        return album
+    }
+}
+
+// Column references
+extension Album {
+    enum Columns {
+        static let id = Column("id")
+        static let title = Column("title")
+        static let artistId = Column("artistId")
+        static let year = Column("year")
+        static let artworkPath = Column("artworkPath")
+    }
+}
+
+extension Track {
+    enum Columns {
+        static let id = Column("id")
+        static let filePath = Column("filePath")
+        static let title = Column("title")
+        static let albumId = Column("albumId")
+        static let artistId = Column("artistId")
+        static let trackNumber = Column("trackNumber")
+        static let discNumber = Column("discNumber")
+        static let duration = Column("duration")
+        static let fileSize = Column("fileSize")
+        static let dateAdded = Column("dateAdded")
+    }
+}
+
+extension Artist {
+    enum Columns {
+        static let id = Column("id")
+        static let name = Column("name")
+    }
+}
+
+extension Playlist {
+    enum Columns {
+        static let id = Column("id")
+        static let name = Column("name")
+        static let dateCreated = Column("dateCreated")
+    }
+}
+
+extension PlaylistTrack {
+    enum Columns {
+        static let playlistId = Column("playlistId")
+        static let trackId = Column("trackId")
+        static let position = Column("position")
+    }
+}
