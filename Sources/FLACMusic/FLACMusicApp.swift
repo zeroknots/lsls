@@ -6,6 +6,7 @@ struct FLACMusicApp: App {
     @State private var databaseManager = DatabaseManager.shared
     @State private var playerState = PlayerState()
     @State private var libraryManager = LibraryManager()
+    @State private var themeManager = ThemeManager()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -17,9 +18,14 @@ struct FLACMusicApp: App {
             ContentView()
                 .environment(playerState)
                 .environment(libraryManager)
+                .environment(themeManager)
+                .environment(\.theme, themeManager.current)
+                .environment(\.themeColors, themeManager.resolvedColors)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+                .accentColor(themeManager.resolvedColors.accent)
                 .frame(minWidth: 900, minHeight: 600)
         }
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
         .commands {
             CommandMenu("Playback") {
@@ -61,6 +67,24 @@ struct FLACMusicApp: App {
                     playerState.cycleRepeat()
                 }
                 .keyboardShortcut("r", modifiers: .command)
+            }
+
+            CommandMenu("Theme") {
+                ForEach(BuiltInThemes.all, id: \.meta.name) { theme in
+                    Button(theme.meta.name) {
+                        themeManager.applyBuiltIn(theme)
+                    }
+                }
+
+                Divider()
+
+                Button("Open Theme File") {
+                    themeManager.openThemeFile()
+                }
+
+                Button("Reload Theme") {
+                    themeManager.reload()
+                }
             }
         }
     }

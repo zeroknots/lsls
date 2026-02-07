@@ -4,6 +4,8 @@ import GRDB
 struct PlaylistDetailView: View {
     let playlist: Playlist
     @Environment(PlayerState.self) private var playerState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var tracks: [TrackInfo] = []
 
     private let db = DatabaseManager.shared
@@ -13,10 +15,10 @@ struct PlaylistDetailView: View {
             // Header
             HStack(spacing: 16) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: theme.shapes.albumArtRadius)
                         .fill(
                             LinearGradient(
-                                colors: [.purple.opacity(0.6), .blue.opacity(0.4)],
+                                colors: [colors.accent, colors.accentSubtle],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -29,10 +31,11 @@ struct PlaylistDetailView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(playlist.name)
-                        .font(.title.bold())
+                        .font(.system(size: theme.typography.titleSize, weight: .bold))
+                        .foregroundStyle(colors.textPrimary)
 
                     Text("\(tracks.count) songs")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colors.textSecondary)
 
                     if !tracks.isEmpty {
                         HStack(spacing: 12) {
@@ -41,7 +44,7 @@ struct PlaylistDetailView: View {
                                     playerState.play(track: first, fromQueue: tracks)
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(AccentFilledButtonStyle())
 
                             Button("Shuffle") {
                                 if let random = tracks.randomElement() {
@@ -49,7 +52,7 @@ struct PlaylistDetailView: View {
                                     playerState.play(track: random, fromQueue: tracks)
                                 }
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(AccentOutlineButtonStyle())
                         }
                     }
                 }
@@ -58,7 +61,9 @@ struct PlaylistDetailView: View {
             }
             .padding(24)
 
-            Divider()
+            Rectangle()
+                .fill(colors.separator)
+                .frame(height: 1)
 
             // Track list
             if tracks.isEmpty {
@@ -67,6 +72,7 @@ struct PlaylistDetailView: View {
                 } description: {
                     Text("Add songs to this playlist")
                 }
+                .foregroundStyle(colors.textSecondary)
             } else {
                 List {
                     ForEach(tracks) { trackInfo in
@@ -82,8 +88,11 @@ struct PlaylistDetailView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(colors.background)
             }
         }
+        .background(colors.background)
         .navigationTitle(playlist.name)
         .task {
             loadTracks()

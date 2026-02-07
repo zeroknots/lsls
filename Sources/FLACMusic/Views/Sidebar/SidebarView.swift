@@ -12,6 +12,8 @@ enum SidebarSection: Hashable {
 
 struct SidebarView: View {
     @Binding var selection: SidebarSection?
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var playlists: [Playlist] = []
     @State private var showNewPlaylist = false
     @State private var newPlaylistName = ""
@@ -20,21 +22,21 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selection) {
-            Section("Library") {
-                Label("Albums", systemImage: "square.grid.2x2")
-                    .tag(SidebarSection.albums)
-                Label("Artists", systemImage: "music.mic")
-                    .tag(SidebarSection.artists)
-                Label("Songs", systemImage: "music.note")
-                    .tag(SidebarSection.songs)
-                Label("Recently Added", systemImage: "clock")
-                    .tag(SidebarSection.recentlyAdded)
+            Section {
+                sidebarRow("Albums", icon: "square.grid.2x2", tag: .albums)
+                sidebarRow("Artists", icon: "music.mic", tag: .artists)
+                sidebarRow("Songs", icon: "music.note", tag: .songs)
+                sidebarRow("Recently Added", icon: "clock", tag: .recentlyAdded)
+            } header: {
+                Text("Library")
+                    .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+                    .textCase(nil)
             }
 
-            Section("Playlists") {
+            Section {
                 ForEach(playlists) { playlist in
-                    Label(playlist.name, systemImage: "music.note.list")
-                        .tag(SidebarSection.playlist(playlist))
+                    sidebarRow(playlist.name, icon: "music.note.list", tag: .playlist(playlist))
                         .contextMenu {
                             Button("Delete", role: .destructive) {
                                 deletePlaylist(playlist)
@@ -45,13 +47,25 @@ struct SidebarView: View {
                 Button {
                     showNewPlaylist = true
                 } label: {
-                    Label("New Playlist", systemImage: "plus")
+                    Label {
+                        Text("New Playlist")
+                            .foregroundStyle(colors.textTertiary)
+                    } icon: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(colors.textTertiary)
+                    }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+            } header: {
+                Text("Playlists")
+                    .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+                    .textCase(nil)
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(.ultraThinMaterial)
         .navigationTitle("FLACMusic")
         .task {
             loadPlaylists()
@@ -65,6 +79,23 @@ struct SidebarView: View {
                 createPlaylist()
             }
         }
+    }
+
+    private func sidebarRow(_ title: String, icon: String, tag: SidebarSection) -> some View {
+        Label {
+            Text(title)
+                .foregroundStyle(colors.textPrimary)
+        } icon: {
+            Image(systemName: icon)
+                .font(.system(size: theme.typography.captionSize))
+                .foregroundStyle(colors.accent)
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(colors.accentSubtle)
+                )
+        }
+        .tag(tag)
     }
 
     private func loadPlaylists() {

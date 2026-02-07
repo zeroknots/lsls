@@ -4,6 +4,8 @@ import GRDB
 struct AlbumDetailView: View {
     let album: Album
     @Environment(PlayerState.self) private var playerState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var tracks: [TrackInfo] = []
     @State private var artist: Artist?
@@ -14,27 +16,28 @@ struct AlbumDetailView: View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: 20) {
-                AlbumArtView(album: album, size: 200)
+                AlbumArtView(album: album, size: 220)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(album.title)
-                        .font(.title.bold())
+                        .font(.system(size: theme.typography.titleSize, weight: .bold))
+                        .foregroundStyle(colors.textPrimary)
 
                     if let artist {
                         Text(artist.name)
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: theme.typography.headlineSize))
+                            .foregroundStyle(colors.textSecondary)
                     }
 
                     if let year = album.year {
                         Text(String(year))
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: theme.typography.captionSize))
+                            .foregroundStyle(colors.textTertiary)
                     }
 
                     Text("\(tracks.count) songs · \(totalDuration)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.textSecondary)
 
                     HStack(spacing: 12) {
                         Button("Play All") {
@@ -42,8 +45,7 @@ struct AlbumDetailView: View {
                                 playerState.play(track: first, fromQueue: tracks)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(AccentFilledButtonStyle())
 
                         Button("Shuffle") {
                             if let random = tracks.randomElement() {
@@ -51,17 +53,18 @@ struct AlbumDetailView: View {
                                 playerState.play(track: random, fromQueue: tracks)
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                        .buttonStyle(AccentOutlineButtonStyle())
                     }
                     .padding(.top, 8)
                 }
 
                 Spacer()
             }
-            .padding(24)
+            .padding(28)
 
-            Divider()
+            Rectangle()
+                .fill(colors.separator)
+                .frame(height: 1)
 
             // Track list
             ScrollView {
@@ -74,12 +77,12 @@ struct AlbumDetailView: View {
                         ) {
                             playerState.play(track: trackInfo, fromQueue: tracks)
                         }
-                        Divider().padding(.leading, 50)
                     }
                 }
                 .padding(.horizontal, 16)
             }
         }
+        .background(colors.background)
         .task {
             loadTracks()
         }

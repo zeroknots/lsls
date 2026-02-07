@@ -4,6 +4,8 @@ import GRDB
 struct SearchResultsView: View {
     @Binding var searchText: String
     @Environment(PlayerState.self) private var playerState
+    @Environment(\.themeColors) private var colors
+    @Environment(\.theme) private var theme
     @State private var tracks: [TrackInfo] = []
     @State private var albums: [AlbumInfo] = []
     @State private var artists: [Artist] = []
@@ -19,6 +21,7 @@ struct SearchResultsView: View {
                 } description: {
                     Text("Search for songs, albums, and artists")
                 }
+                .foregroundStyle(colors.textSecondary)
                 .padding(.top, 100)
             } else if tracks.isEmpty && albums.isEmpty && artists.isEmpty {
                 ContentUnavailableView {
@@ -26,6 +29,7 @@ struct SearchResultsView: View {
                 } description: {
                     Text("No results for \"\(searchText)\"")
                 }
+                .foregroundStyle(colors.textSecondary)
                 .padding(.top, 100)
             } else {
                 VStack(alignment: .leading, spacing: 24) {
@@ -35,18 +39,20 @@ struct SearchResultsView: View {
                                 HStack(spacing: 12) {
                                     ZStack {
                                         Circle()
-                                            .fill(.quaternary)
+                                            .fill(colors.accentSubtle)
                                             .frame(width: 44, height: 44)
                                         Image(systemName: "music.mic")
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(colors.accent)
                                     }
                                     Text(artist.name)
+                                        .foregroundStyle(colors.textPrimary)
                                 }
                                 .padding(.horizontal, 24)
                             }
                         } header: {
                             Text("Artists")
-                                .font(.title3.bold())
+                                .font(.system(size: theme.typography.headlineSize, weight: .bold))
+                                .foregroundStyle(colors.textPrimary)
                                 .padding(.horizontal, 24)
                         }
                     }
@@ -60,13 +66,14 @@ struct SearchResultsView: View {
                                             AlbumArtView(album: albumInfo.album, size: 140)
 
                                             Text(albumInfo.album.title)
-                                                .font(.caption.weight(.medium))
+                                                .font(.system(size: theme.typography.captionSize, weight: .medium))
+                                                .foregroundStyle(colors.textPrimary)
                                                 .lineLimit(1)
 
                                             if let artist = albumInfo.artist {
                                                 Text(artist.name)
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
+                                                    .font(.system(size: theme.typography.smallCaptionSize))
+                                                    .foregroundStyle(colors.textSecondary)
                                                     .lineLimit(1)
                                             }
                                         }
@@ -80,7 +87,8 @@ struct SearchResultsView: View {
                             }
                         } header: {
                             Text("Albums")
-                                .font(.title3.bold())
+                                .font(.system(size: theme.typography.headlineSize, weight: .bold))
+                                .foregroundStyle(colors.textPrimary)
                                 .padding(.horizontal, 24)
                         }
                     }
@@ -95,13 +103,13 @@ struct SearchResultsView: View {
                                     ) {
                                         playerState.play(track: trackInfo, fromQueue: tracks)
                                     }
-                                    Divider().padding(.leading, 50)
                                 }
                             }
                             .padding(.horizontal, 16)
                         } header: {
                             Text("Songs")
-                                .font(.title3.bold())
+                                .font(.system(size: theme.typography.headlineSize, weight: .bold))
+                                .foregroundStyle(colors.textPrimary)
                                 .padding(.horizontal, 24)
                         }
                     }
@@ -109,6 +117,7 @@ struct SearchResultsView: View {
                 .padding(.vertical, 16)
             }
         }
+        .background(colors.background)
         .navigationTitle("Search")
         .onChange(of: searchText) { _, newValue in
             performSearch(newValue)

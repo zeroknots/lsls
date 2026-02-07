@@ -4,6 +4,7 @@ import GRDB
 struct SongListView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(\.themeColors) private var colors
     @State private var tracks: [TrackInfo] = []
 
     private let db = DatabaseManager.shared
@@ -16,6 +17,7 @@ struct SongListView: View {
                 } description: {
                     Text("Import a folder to get started")
                 }
+                .foregroundStyle(colors.textSecondary)
             } else {
                 ForEach(tracks) { trackInfo in
                     TrackRow(
@@ -28,6 +30,8 @@ struct SongListView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(colors.background)
         .navigationTitle("Songs")
         .task {
             loadTracks()
