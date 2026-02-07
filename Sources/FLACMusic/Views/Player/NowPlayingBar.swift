@@ -6,26 +6,16 @@ struct NowPlayingBar: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Progress bar at top edge
-            ThemedProgressBar(
-                progress: playerState.duration > 0
-                    ? playerState.currentTime / playerState.duration : 0,
-                height: 4,
-                showKnob: true
-            ) { fraction in
-                playerState.seekFraction(fraction)
-            }
-
-            // Controls
-            HStack(spacing: 16) {
-                // Track info
-                HStack(spacing: 12) {
+        ZStack(alignment: .top) {
+            // Main content below the progress bar
+            HStack(spacing: 0) {
+                // Left: Album art + track info
+                HStack(spacing: 14) {
                     if let album = playerState.currentTrack?.album {
-                        AlbumArtView(album: album, size: 48)
+                        AlbumArtView(album: album, size: 56)
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(playerState.currentTrack?.track.title ?? "")
                             .font(.system(size: theme.typography.bodySize, weight: .medium))
                             .foregroundStyle(colors.textPrimary)
@@ -37,46 +27,82 @@ struct NowPlayingBar: View {
                             .lineLimit(1)
                     }
                 }
-                .frame(maxWidth: 240, alignment: .leading)
+                .frame(minWidth: 180, maxWidth: 280, alignment: .leading)
 
                 Spacer()
 
-                // Playback controls
+                // Center: Transport controls + time
                 VStack(spacing: 4) {
-                    PlaybackControls()
+                    HStack(spacing: 20) {
+                        Button {
+                            playerState.playPrevious()
+                        } label: {
+                            Image(systemName: "backward.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(colors.textPrimary)
+                        }
+                        .buttonStyle(.plain)
 
-                    HStack(spacing: 8) {
-                        Text(TimeFormatter.format(playerState.currentTime))
-                            .font(.system(size: theme.typography.smallCaptionSize).monospacedDigit())
-                            .foregroundStyle(colors.textTertiary)
+                        Button {
+                            playerState.togglePlayPause()
+                        } label: {
+                            Image(systemName: playerState.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundStyle(colors.textPrimary)
+                        }
+                        .buttonStyle(.plain)
 
-                        Text(TimeFormatter.format(playerState.duration))
-                            .font(.system(size: theme.typography.smallCaptionSize).monospacedDigit())
-                            .foregroundStyle(colors.textTertiary)
+                        Button {
+                            playerState.playNext()
+                        } label: {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(colors.textPrimary)
+                        }
+                        .buttonStyle(.plain)
                     }
+
+                    HStack(spacing: 4) {
+                        Text(TimeFormatter.format(playerState.currentTime))
+                        Text("/")
+                        Text(TimeFormatter.format(playerState.duration))
+                    }
+                    .font(.system(size: theme.typography.smallCaptionSize).monospacedDigit())
+                    .foregroundStyle(colors.textTertiary)
                 }
 
                 Spacer()
 
-                // Volume
+                // Right: Volume
                 VolumeSlider()
-                    .frame(width: 150)
+                    .frame(width: 180)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
+            .padding(.top, 3) // Account for progress bar height
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+
+            // Progress bar at absolute top edge
+            ThemedProgressBar(
+                progress: playerState.duration > 0
+                    ? playerState.currentTime / playerState.duration : 0,
+                height: 3,
+                showKnob: true
+            ) { fraction in
+                playerState.seekFraction(fraction)
+            }
         }
         .background(
             Group {
                 if theme.effects.useVibrancy {
                     ZStack {
                         Color.clear.background(.ultraThinMaterial)
-                        colors.backgroundTertiary.opacity(0.7)
+                        colors.backgroundTertiary.opacity(0.8)
                     }
                 } else {
                     colors.backgroundTertiary
                 }
             }
         )
-        .shadow(color: .black.opacity(0.15), radius: 8, y: -4)
+        .shadow(color: .black.opacity(0.15), radius: 10, y: -5)
     }
 }

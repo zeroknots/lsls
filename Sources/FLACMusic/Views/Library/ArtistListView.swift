@@ -10,19 +10,27 @@ struct ArtistListView: View {
     @State private var artists: [Artist] = []
     @State private var selectedArtist: Artist?
     @State private var albums: [AlbumInfo] = []
-    @State private var selectedAlbum: Album?
+    @State private var albumTracks: [Int64: [TrackInfo]] = [:]
+    @Binding var selectedAlbum: Album?
     @State private var artistFirstAlbum: [Int64: Album] = [:]
 
     private let db = DatabaseManager.shared
 
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(
-            minimum: theme.spacing.gridItemSize,
-            maximum: theme.spacing.gridItemSize + 30
-        ), spacing: theme.spacing.gridSpacing)]
+    var body: some View {
+        artistBrowser
+        .background(colors.background)
+        .task {
+            loadArtists()
+        }
+        .onChange(of: libraryManager.lastImportDate) {
+            loadArtists()
+        }
+        .onChange(of: selectedArtist) {
+            loadAlbums()
+        }
     }
 
-    var body: some View {
+    private var artistBrowser: some View {
         HStack(spacing: 0) {
             // Artist list column
             ScrollView {
@@ -36,45 +44,52 @@ struct ArtistListView: View {
             .frame(width: 220)
             .background(colors.backgroundSecondary.opacity(0.5))
 
-            // Divider
             Rectangle()
                 .fill(colors.separator)
                 .frame(width: 1)
 
-            // Albums for selected artist
+            // Artist detail: name pinned at top, albums + tracks scrollable
             Group {
                 if let artist = selectedArtist {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            // Artist header
-                            HStack(spacing: 14) {
-                                artistAvatar(for: artist, size: 56)
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Pinned artist header
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(artist.name)
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundStyle(colors.textPrimary)
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(artist.name)
-                                        .font(.system(size: theme.typography.titleSize, weight: .bold))
-                                        .foregroundStyle(colors.textPrimary)
-                                    Text("\(albums.count) album\(albums.count == 1 ? "" : "s")")
-                                        .font(.system(size: theme.typography.captionSize))
-                                        .foregroundStyle(colors.textSecondary)
-                                }
-                            }
-                            .padding(.horizontal, theme.spacing.contentPadding)
-                            .padding(.top, 20)
-                            .padding(.bottom, 16)
+                            let totalSongs = albumTracks.values.reduce(0) { $0 + $1.count }
+                            Text("\(albums.count) album\(albums.count == 1 ? "" : "s"), \(totalSongs) song\(totalSongs == 1 ? "" : "s")")
+                                .font(.system(size: theme.typography.captionSize))
+                                .foregroundStyle(colors.textSecondary)
+                        }
+                        .padding(.horizontal, theme.spacing.contentPadding)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
 
-                            LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
+                        Rectangle()
+                            .fill(colors.separator)
+                            .frame(height: 1)
+
+                        // Scrollable albums + tracks
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 0) {
                                 ForEach(albums) { albumInfo in
-                                    AlbumCard(albumInfo: albumInfo) {
-                                        selectedAlbum = albumInfo.album
+                                    albumSection(albumInfo)
+
+                                    if albumInfo.id != albums.last?.id {
+                                        Rectangle()
+                                            .fill(colors.separator)
+                                            .frame(height: 1)
+                                            .padding(.horizontal, theme.spacing.contentPadding)
+                                            .padding(.vertical, 8)
                                     }
                                 }
                             }
-                            .padding(.horizontal, theme.spacing.contentPadding)
                             .padding(.bottom, theme.spacing.contentPadding)
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .background(colors.background)
                 } else {
                     ContentUnavailableView {
@@ -88,21 +103,63 @@ struct ArtistListView: View {
                 }
             }
         }
-        .background(colors.background)
-        .task {
-            loadArtists()
-        }
-        .onChange(of: libraryManager.lastImportDate) {
-            loadArtists()
-        }
-        .onChange(of: selectedArtist) {
-            loadAlbums()
-        }
-        .sheet(item: $selectedAlbum) { album in
-            AlbumDetailView(album: album)
-                .environment(playerState)
-                .environment(syncManager)
-                .frame(minWidth: 500, minHeight: 400)
+    }
+
+    private func albumSection(_ albumInfo: AlbumInfo) -> some View {
+        let tracks = albumTracks[albumInfo.album.id ?? -1] ?? []
+        let allArtistTracks = albums.flatMap { albumTracks[$0.album.id ?? -1] ?? [] }
+
+        return VStack(alignment: .leading, spacing: 0) {
+            // Album header: art + title + year
+            HStack(spacing: 16) {
+                AlbumArtView(album: albumInfo.album, size: 210)
+                    .onTapGesture {
+                        selectedAlbum = albumInfo.album
+                    }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(albumInfo.album.title)
+                        .font(.system(size: theme.typography.headlineSize, weight: .semibold))
+                        .foregroundStyle(colors.textPrimary)
+
+                    if let year = albumInfo.album.year {
+                        Text(String(year))
+                            .font(.system(size: theme.typography.captionSize))
+                            .foregroundStyle(colors.textTertiary)
+                    }
+
+                    Text("\(tracks.count) song\(tracks.count == 1 ? "" : "s")")
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.textSecondary)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, theme.spacing.contentPadding)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
+            // Track list for this album
+            ForEach(tracks) { trackInfo in
+                TrackRow(
+                    trackInfo: trackInfo,
+                    showAlbum: false,
+                    isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
+                    isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
+                ) {
+                    playerState.play(track: trackInfo, fromQueue: allArtistTracks)
+                } onSyncToggle: {
+                    guard let trackId = trackInfo.track.id else { return }
+                    if syncManager.isTrackInSyncList(trackId) {
+                        if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
+                            syncManager.removeSyncItem(item)
+                        }
+                    } else {
+                        syncManager.addTrack(trackId)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
         }
     }
 
@@ -204,12 +261,22 @@ struct ArtistListView: View {
     private func loadAlbums() {
         guard let artistId = selectedArtist?.id else {
             albums = []
+            albumTracks = [:]
             return
         }
         do {
             albums = try db.dbQueue.read { db in
                 try LibraryQueries.albumsForArtist(artistId, in: db)
             }
+            // Load tracks for each album
+            var tracks: [Int64: [TrackInfo]] = [:]
+            for albumInfo in albums {
+                guard let albumId = albumInfo.album.id else { continue }
+                tracks[albumId] = try db.dbQueue.read { db in
+                    try LibraryQueries.tracksForAlbum(albumId, in: db)
+                }
+            }
+            albumTracks = tracks
         } catch {
             print("Failed to load albums: \(error)")
         }

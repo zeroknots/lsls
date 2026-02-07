@@ -65,7 +65,7 @@ struct ThemeSpacing: Codable, Equatable, Sendable {
     var contentPadding: Double = 24
     var sectionSpacing: Double = 24
     var rowHeight: Double = 40
-    var nowPlayingBarHeight: Double = 72
+    var nowPlayingBarHeight: Double = 88
 }
 
 struct ThemeShapes: Codable, Equatable, Sendable {

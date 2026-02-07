@@ -8,7 +8,7 @@ struct RecentlyAddedView: View {
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
     @State private var albums: [AlbumInfo] = []
-    @State private var selectedAlbum: Album?
+    @Binding var selectedAlbum: Album?
 
     private let db = DatabaseManager.shared
 
@@ -20,6 +20,17 @@ struct RecentlyAddedView: View {
     }
 
     var body: some View {
+        recentGrid
+        .background(colors.background)
+        .task {
+            loadRecent()
+        }
+        .onChange(of: libraryManager.lastImportDate) {
+            loadRecent()
+        }
+    }
+
+    private var recentGrid: some View {
         ScrollView {
             if albums.isEmpty {
                 ContentUnavailableView {
@@ -40,20 +51,7 @@ struct RecentlyAddedView: View {
                 .padding(theme.spacing.contentPadding)
             }
         }
-        .background(colors.background)
         .navigationTitle("Recently Added")
-        .task {
-            loadRecent()
-        }
-        .onChange(of: libraryManager.lastImportDate) {
-            loadRecent()
-        }
-        .sheet(item: $selectedAlbum) { album in
-            AlbumDetailView(album: album)
-                .environment(playerState)
-                .environment(syncManager)
-                .frame(minWidth: 500, minHeight: 400)
-        }
     }
 
     private func loadRecent() {
