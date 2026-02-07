@@ -16,6 +16,7 @@ final class PlayerState {
     private var nowPlayingTimer: Timer?
 
     var currentTrack: TrackInfo?
+    var currentFormat: AudioFormat?
     var isPlaying: Bool { engine.isPlaying }
     var currentTime: TimeInterval { engine.currentTime }
     var duration: TimeInterval { engine.duration }
@@ -62,6 +63,7 @@ final class PlayerState {
             } else {
                 engine.stop()
                 currentTrack = nil
+                currentFormat = nil
                 nowPlayingTimer?.invalidate()
                 updateNowPlaying()
             }
@@ -120,12 +122,16 @@ final class PlayerState {
             }
         }
         currentTrack = track
+        currentFormat = nil
         Task {
             do {
                 try await engine.load(url: url)
                 engine.play()
                 updateNowPlaying()
                 startNowPlayingTimer()
+
+                let format = await MetadataReader.readAudioFormat(from: url)
+                self.currentFormat = format
             } catch {
                 print("Failed to load track: \(error)")
                 playNext()

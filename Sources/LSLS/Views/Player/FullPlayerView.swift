@@ -46,6 +46,12 @@ struct FullPlayerView: View {
                             .font(.system(size: theme.typography.captionSize))
                             .foregroundStyle(colors.textTertiary)
                     }
+
+                    if let format = playerState.currentFormat {
+                        Text(format.displayString)
+                            .font(.system(size: theme.typography.captionSize).monospacedDigit())
+                            .foregroundStyle(colors.textTertiary)
+                    }
                 }
 
                 // Progress
