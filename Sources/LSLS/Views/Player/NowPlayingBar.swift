@@ -25,6 +25,13 @@ struct NowPlayingBar: View {
                             .font(.system(size: theme.typography.captionSize))
                             .foregroundStyle(colors.textSecondary)
                             .lineLimit(1)
+
+                        if let format = playerState.currentFormat {
+                            Text(format.displayString)
+                                .font(.system(size: theme.typography.smallCaptionSize).monospacedDigit())
+                                .foregroundStyle(colors.textTertiary)
+                                .lineLimit(1)
+                        }
                     }
                 }
                 .frame(minWidth: 180, maxWidth: 280, alignment: .leading)

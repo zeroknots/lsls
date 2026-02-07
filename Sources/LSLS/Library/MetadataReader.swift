@@ -167,6 +167,78 @@ enum MetadataReader {
         return nil
     }
 
+    static func readAudioFormat(from url: URL) async -> AudioFormat? {
+        guard !url.absoluteString.hasPrefix("http") else { return nil }
+
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: ffprobePath)
+                process.arguments = [
+                    "-v", "quiet",
+                    "-print_format", "json",
+                    "-show_streams",
+                    "-select_streams", "a:0",
+                    url.path,
+                ]
+
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
+
+                do {
+                    try process.run()
+
+                    let timer = DispatchSource.makeTimerSource(queue: .global())
+                    timer.schedule(deadline: .now() + 5)
+                    timer.setEventHandler { process.terminate() }
+                    timer.resume()
+
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    timer.cancel()
+
+                    guard process.terminationStatus == 0,
+                          let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let streams = json["streams"] as? [[String: Any]],
+                          let stream = streams.first
+                    else {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+
+                    let codecName = stream["codec_name"] as? String ?? "unknown"
+                    let sampleRate = Int(stream["sample_rate"] as? String ?? "0") ?? 0
+                    let bitDepth = Int(stream["bits_per_raw_sample"] as? String ?? "0") ?? 0
+                    let bitRate = Int(stream["bit_rate"] as? String ?? "0") ?? 0
+                    let channels = stream["channels"] as? Int ?? 2
+
+                    continuation.resume(returning: AudioFormat(
+                        codec: normalizeCodec(codecName),
+                        sampleRate: sampleRate,
+                        bitDepth: bitDepth > 0 ? bitDepth : nil,
+                        bitRate: bitRate > 0 ? bitRate : nil,
+                        channels: channels
+                    ))
+                } catch {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    private static func normalizeCodec(_ raw: String) -> String {
+        switch raw.lowercased() {
+        case "flac": return "FLAC"
+        case "mp3": return "MP3"
+        case "aac": return "AAC"
+        case "alac": return "ALAC"
+        case "vorbis": return "OGG"
+        case let s where s.hasPrefix("pcm"): return "WAV"
+        default: return raw.uppercased()
+        }
+    }
+
     enum MetadataError: Error {
         case parseError
         case processError(Int32)

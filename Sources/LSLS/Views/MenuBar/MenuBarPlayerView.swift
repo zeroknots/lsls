@@ -42,6 +42,13 @@ struct MenuBarPlayerView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+
+            if let format = playerState.currentFormat {
+                Text(format.displayString)
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
