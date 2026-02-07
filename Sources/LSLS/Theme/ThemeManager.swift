@@ -35,7 +35,9 @@ final class ThemeManager {
     }
 
     func reload() {
-        current = ThemeManager.loadTheme(from: configFile)
+        let loaded = ThemeManager.loadTheme(from: configFile)
+        guard loaded != current else { return }
+        current = loaded
     }
 
     func openThemeFile() {
@@ -98,8 +100,7 @@ final class ThemeManager {
         )
 
         source.setEventHandler { [weak self] in
-            Thread.sleep(forTimeInterval: 0.2)
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 self?.reload()
             }
         }
