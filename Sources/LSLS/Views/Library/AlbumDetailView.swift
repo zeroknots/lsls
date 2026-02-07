@@ -104,6 +104,8 @@ struct AlbumDetailView: View {
                             playlists: playlists
                         ) {
                             playerState.play(track: trackInfo, fromQueue: tracks)
+                        } onAddToQueue: {
+                            playerState.addToQueueEnd(trackInfo)
                         } onSyncToggle: {
                             guard let trackId = trackInfo.track.id else { return }
                             if syncManager.isTrackInSyncList(trackId) {

@@ -27,6 +27,7 @@ final class PlayerState {
 
     var shuffleEnabled: Bool = false
     var repeatMode: RepeatMode = .off
+    var isQueueVisible: Bool = false
 
     init() {
         engine.onTrackFinished = { [weak self] in
@@ -92,6 +93,46 @@ final class PlayerState {
 
     func addToQueue(_ track: TrackInfo) {
         queue.addNext(track)
+    }
+
+    func addToQueueEnd(_ track: TrackInfo) {
+        queue.appendToEnd(track)
+    }
+
+    func addAlbumToQueue(_ albumId: Int64) {
+        let db = DatabaseManager.shared
+        do {
+            let tracks = try db.dbQueue.read { db in
+                try LibraryQueries.tracksForAlbum(albumId, in: db)
+            }
+            for track in tracks {
+                queue.appendToEnd(track)
+            }
+        } catch {
+            print("Failed to load album tracks for queue: \(error)")
+        }
+    }
+
+    func addArtistToQueue(_ artistId: Int64) {
+        let db = DatabaseManager.shared
+        do {
+            let tracks = try db.dbQueue.read { db in
+                try LibraryQueries.tracksForArtist(artistId, in: db)
+            }
+            for track in tracks {
+                queue.appendToEnd(track)
+            }
+        } catch {
+            print("Failed to load artist tracks for queue: \(error)")
+        }
+    }
+
+    func moveInQueue(fromOffsets source: IndexSet, toOffset destination: Int) {
+        queue.move(fromOffsets: source, toOffset: destination)
+    }
+
+    func removeFromQueue(at upNextIndex: Int) {
+        queue.removeFromUpNext(at: upNextIndex)
     }
 
     func toggleShuffle() {

@@ -1,17 +1,28 @@
 import Foundation
 import GRDB
+import CoreTransferable
 
-struct AlbumInfo: Decodable, FetchableRecord, Equatable, Hashable, Identifiable {
+struct AlbumInfo: Codable, FetchableRecord, Equatable, Hashable, Identifiable {
     var album: Album
     var artist: Artist?
     var id: Int64? { album.id }
 }
 
-struct TrackInfo: Decodable, FetchableRecord, Equatable, Hashable, Identifiable {
+struct TrackInfo: Codable, FetchableRecord, Equatable, Hashable, Identifiable {
     var track: Track
     var album: Album?
     var artist: Artist?
     var id: Int64? { track.id }
+}
+
+enum LibraryDragItem: Codable, Transferable, Hashable {
+    case track(TrackInfo)
+    case album(AlbumInfo)
+    case artist(Artist)
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .json)
+    }
 }
 
 enum LibraryQueries {
@@ -42,6 +53,15 @@ enum LibraryQueries {
             .including(optional: Track.album)
             .including(optional: Track.artist)
             .order(Track.Columns.discNumber, Track.Columns.trackNumber)
+        return try TrackInfo.fetchAll(db, request)
+    }
+
+    static func tracksForArtist(_ artistId: Int64, in db: Database) throws -> [TrackInfo] {
+        let request = Track
+            .filter(Track.Columns.artistId == artistId)
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .order(Track.Columns.albumId, Track.Columns.discNumber, Track.Columns.trackNumber)
         return try TrackInfo.fetchAll(db, request)
     }
 

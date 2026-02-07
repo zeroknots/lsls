@@ -62,6 +62,10 @@ struct SidebarView: View {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
                 .tag(SidebarSection.syncList)
+                .dropDestination(for: LibraryDragItem.self) { items, _ in
+                    handleSyncDrop(items)
+                    return true
+                }
             } header: {
                 Text("DAP")
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
@@ -85,6 +89,10 @@ struct SidebarView: View {
             Section {
                 ForEach(playlists) { playlist in
                     sidebarRow(playlist.name, icon: "music.note.list", tag: .playlist(playlist))
+                        .dropDestination(for: LibraryDragItem.self) { items, _ in
+                            handlePlaylistDrop(items, playlist: playlist)
+                            return true
+                        }
                         .contextMenu {
                             Button("Delete", role: .destructive) {
                                 deletePlaylist(playlist)
@@ -226,6 +234,61 @@ struct SidebarView: View {
             loadPlaylists()
         } catch {
             print("Failed to delete playlist: \(error)")
+        }
+    }
+
+    private func handleSyncDrop(_ items: [LibraryDragItem]) {
+        for item in items {
+            switch item {
+            case .track(let trackInfo):
+                if let trackId = trackInfo.track.id {
+                    syncManager.addTrack(trackId)
+                }
+            case .album(let albumInfo):
+                if let albumId = albumInfo.album.id {
+                    syncManager.addAlbum(albumId)
+                }
+            case .artist(let artist):
+                if let artistId = artist.id {
+                    syncManager.addArtist(artistId)
+                }
+            }
+        }
+    }
+
+    private func handlePlaylistDrop(_ items: [LibraryDragItem], playlist: Playlist) {
+        guard let playlistId = playlist.id else { return }
+        for item in items {
+            switch item {
+            case .track(let trackInfo):
+                if let trackId = trackInfo.track.id {
+                    try? db.dbQueue.write { dbConn in
+                        try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+                    }
+                }
+            case .album(let albumInfo):
+                if let albumId = albumInfo.album.id {
+                    try? db.dbQueue.write { dbConn in
+                        let tracks = try LibraryQueries.tracksForAlbum(albumId, in: dbConn)
+                        for track in tracks {
+                            if let trackId = track.track.id {
+                                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+                            }
+                        }
+                    }
+                }
+            case .artist(let artist):
+                if let artistId = artist.id {
+                    try? db.dbQueue.write { dbConn in
+                        let tracks = try LibraryQueries.tracksForArtist(artistId, in: dbConn)
+                        for track in tracks {
+                            if let trackId = track.track.id {
+                                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

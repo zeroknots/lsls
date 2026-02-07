@@ -45,5 +45,6 @@ struct AlbumCard: View {
         .animation(.spring(duration: 0.2), value: isHovered)
         .onHover { isHovered = $0 }
         .onTapGesture { onTap?() }
+        .draggable(LibraryDragItem.album(albumInfo))
     }
 }

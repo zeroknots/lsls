@@ -85,6 +85,8 @@ struct PlaylistDetailView: View {
                             playlists: playlists
                         ) {
                             playerState.play(track: trackInfo, fromQueue: tracks)
+                        } onAddToQueue: {
+                            playerState.addToQueueEnd(trackInfo)
                         } onAddToPlaylist: { targetPlaylist in
                             addTrackToPlaylist(trackInfo, playlist: targetPlaylist)
                         } onDelete: {

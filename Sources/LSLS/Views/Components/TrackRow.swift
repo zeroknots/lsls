@@ -9,6 +9,7 @@ struct TrackRow: View {
     var isInSyncList: Bool
     var playlists: [Playlist]
     var onAddToPlaylist: ((Playlist) -> Void)?
+    var onAddToQueue: (() -> Void)?
     var onDelete: (() -> Void)?
     var onEdit: (() -> Void)?
 
@@ -16,13 +17,14 @@ struct TrackRow: View {
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
         self.isInSyncList = isInSyncList
         self.playlists = playlists
         self.onPlay = onPlay
+        self.onAddToQueue = onAddToQueue
         self.onSyncToggle = onSyncToggle
         self.onAddToPlaylist = onAddToPlaylist
         self.onDelete = onDelete
@@ -90,6 +92,7 @@ struct TrackRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.15), value: isHovered)
+        .draggable(LibraryDragItem.track(trackInfo))
         .onTapGesture(count: 2) {
             onPlay()
         }
@@ -97,6 +100,12 @@ struct TrackRow: View {
             if let onEdit {
                 Button("Edit...") {
                     onEdit()
+                }
+            }
+
+            if let onAddToQueue {
+                Button("Add to Queue") {
+                    onAddToQueue()
                 }
             }
 
