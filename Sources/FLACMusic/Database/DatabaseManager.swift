@@ -1,0 +1,76 @@
+import Foundation
+import GRDB
+
+@Observable
+final class DatabaseManager: Sendable {
+    static let shared = DatabaseManager()
+
+    let dbQueue: DatabaseQueue
+
+    private init() {
+        do {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dbDir = appSupport.appendingPathComponent("FLACMusic", isDirectory: true)
+            try FileManager.default.createDirectory(at: dbDir, withIntermediateDirectories: true)
+            let dbPath = dbDir.appendingPathComponent("library.sqlite").path
+            dbQueue = try DatabaseQueue(path: dbPath)
+            try migrate()
+        } catch {
+            fatalError("Database initialization failed: \(error)")
+        }
+    }
+
+    private func migrate() throws {
+        var migrator = DatabaseMigrator()
+
+        migrator.registerMigration("v1") { db in
+            try db.create(table: "artist") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull().unique()
+            }
+
+            try db.create(table: "album") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("title", .text).notNull()
+                t.column("artistId", .integer).references("artist", onDelete: .setNull)
+                t.column("year", .integer)
+                t.column("artworkPath", .text)
+                t.uniqueKey(["title", "artistId"])
+            }
+
+            try db.create(table: "track") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("filePath", .text).notNull().unique()
+                t.column("title", .text).notNull()
+                t.column("albumId", .integer).references("album", onDelete: .setNull)
+                t.column("artistId", .integer).references("artist", onDelete: .setNull)
+                t.column("trackNumber", .integer)
+                t.column("discNumber", .integer).defaults(to: 1)
+                t.column("duration", .double).notNull()
+                t.column("fileSize", .integer)
+                t.column("dateAdded", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "playlist") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("dateCreated", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "playlistTrack") { t in
+                t.column("playlistId", .integer).notNull().references("playlist", onDelete: .cascade)
+                t.column("trackId", .integer).notNull().references("track", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.primaryKey(["playlistId", "trackId"])
+            }
+        }
+
+        migrator.registerMigration("v2") { db in
+            try db.alter(table: "track") { t in
+                t.add(column: "genre", .text)
+            }
+        }
+
+        try migrator.migrate(dbQueue)
+    }
+}
