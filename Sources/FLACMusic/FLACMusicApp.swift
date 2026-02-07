@@ -7,6 +7,7 @@ struct FLACMusicApp: App {
     @State private var playerState = PlayerState()
     @State private var libraryManager = LibraryManager()
     @State private var themeManager = ThemeManager()
+    @State private var syncManager = SyncManager()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -21,6 +22,7 @@ struct FLACMusicApp: App {
                 .environment(themeManager)
                 .environment(\.theme, themeManager.current)
                 .environment(\.themeColors, themeManager.resolvedColors)
+                .environment(syncManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
                 .accentColor(themeManager.resolvedColors.accent)
                 .frame(minWidth: 900, minHeight: 600)
@@ -86,6 +88,11 @@ struct FLACMusicApp: App {
                     themeManager.reload()
                 }
             }
+        }
+
+        Settings {
+            SettingsView()
+                .environment(syncManager)
         }
     }
 }

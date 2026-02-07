@@ -7,6 +7,7 @@ struct AlbumGridView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var albums: [AlbumInfo] = []
 
     private let db = DatabaseManager.shared
@@ -34,6 +35,21 @@ struct AlbumGridView: View {
                         AlbumCard(albumInfo: albumInfo) {
                             selectedAlbum = albumInfo.album
                         }
+                        .contextMenu {
+                            if let albumId = albumInfo.album.id {
+                                if syncManager.isAlbumInSyncList(albumId) {
+                                    Button("Remove Album from Sync List", role: .destructive) {
+                                        if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == albumId }) {
+                                            syncManager.removeSyncItem(item)
+                                        }
+                                    }
+                                } else {
+                                    Button("Add Album to Sync List") {
+                                        syncManager.addAlbum(albumId)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(theme.spacing.contentPadding)
@@ -50,6 +66,7 @@ struct AlbumGridView: View {
         .sheet(item: $selectedAlbum) { album in
             AlbumDetailView(album: album)
                 .environment(playerState)
+                .environment(syncManager)
                 .frame(minWidth: 500, minHeight: 400)
         }
     }

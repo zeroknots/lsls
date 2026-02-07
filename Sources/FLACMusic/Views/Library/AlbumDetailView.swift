@@ -6,6 +6,7 @@ struct AlbumDetailView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @Environment(\.dismiss) private var dismiss
     @State private var tracks: [TrackInfo] = []
     @State private var artist: Artist?
@@ -54,6 +55,29 @@ struct AlbumDetailView: View {
                             }
                         }
                         .buttonStyle(AccentOutlineButtonStyle())
+
+                        if let albumId = album.id {
+                            if syncManager.isAlbumInSyncList(albumId) {
+                                Button {
+                                    if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == albumId }) {
+                                        syncManager.removeSyncItem(item)
+                                    }
+                                } label: {
+                                    Label("Synced", systemImage: "checkmark.circle.fill")
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.large)
+                                .tint(.green)
+                            } else {
+                                Button {
+                                    syncManager.addAlbum(albumId)
+                                } label: {
+                                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.large)
+                            }
+                        }
                     }
                     .padding(.top, 8)
                 }
@@ -73,9 +97,19 @@ struct AlbumDetailView: View {
                         TrackRow(
                             trackInfo: trackInfo,
                             showAlbum: false,
-                            isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id
+                            isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
+                            isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
                         ) {
                             playerState.play(track: trackInfo, fromQueue: tracks)
+                        } onSyncToggle: {
+                            guard let trackId = trackInfo.track.id else { return }
+                            if syncManager.isTrackInSyncList(trackId) {
+                                if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
+                                    syncManager.removeSyncItem(item)
+                                }
+                            } else {
+                                syncManager.addTrack(trackId)
+                            }
                         }
                     }
                 }

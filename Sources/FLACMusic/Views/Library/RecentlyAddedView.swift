@@ -6,6 +6,7 @@ struct RecentlyAddedView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var albums: [AlbumInfo] = []
     @State private var selectedAlbum: Album?
 
@@ -50,6 +51,7 @@ struct RecentlyAddedView: View {
         .sheet(item: $selectedAlbum) { album in
             AlbumDetailView(album: album)
                 .environment(playerState)
+                .environment(syncManager)
                 .frame(minWidth: 500, minHeight: 400)
         }
     }

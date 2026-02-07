@@ -6,6 +6,7 @@ struct SearchResultsView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var tracks: [TrackInfo] = []
     @State private var albums: [AlbumInfo] = []
     @State private var artists: [Artist] = []
@@ -125,6 +126,7 @@ struct SearchResultsView: View {
         .sheet(item: $selectedAlbum) { album in
             AlbumDetailView(album: album)
                 .environment(playerState)
+                .environment(syncManager)
                 .frame(minWidth: 500, minHeight: 400)
         }
     }

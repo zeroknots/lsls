@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var selectedSection: SidebarSection? = .albums
     @State private var selectedAlbum: Album?
     @State private var searchText = ""
@@ -29,6 +30,8 @@ struct ContentView: View {
                         PlaylistDetailView(playlist: playlist)
                     case .search:
                         SearchResultsView(searchText: $searchText)
+                    case .syncList:
+                        SyncListView()
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(colors.textSecondary)
@@ -65,6 +68,26 @@ struct ContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: theme.shapes.cardRadius))
                 .shadow(color: .black.opacity(0.2), radius: 8)
                 .padding(.bottom, playerState.currentTrack != nil ? 80 : 20)
+            }
+
+            if syncManager.isSyncing, selectedSection != .syncList {
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                        Text("Syncing to Rockbox...")
+                            .font(.caption.weight(.medium))
+                    }
+                    ProgressView(value: syncManager.syncProgress)
+                    Text(syncManager.syncStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.bottom, playerState.currentTrack != nil ? 110 : 50)
             }
         }
         .toolbar {

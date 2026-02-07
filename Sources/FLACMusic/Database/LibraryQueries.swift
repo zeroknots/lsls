@@ -135,6 +135,74 @@ enum LibraryQueries {
         try album.insert(db)
         return album
     }
+
+    // MARK: - Sync List
+
+    static func allSyncItems(in db: Database) throws -> [SyncItem] {
+        try SyncItem
+            .order(SyncItem.Columns.dateAdded.desc)
+            .fetchAll(db)
+    }
+
+    static func syncItemExists(itemType: SyncItemType, trackId: Int64? = nil, albumId: Int64? = nil, artistId: Int64? = nil, in db: Database) throws -> Bool {
+        var request = SyncItem.filter(SyncItem.Columns.itemType == itemType.rawValue)
+        if let trackId { request = request.filter(SyncItem.Columns.trackId == trackId) }
+        if let albumId { request = request.filter(SyncItem.Columns.albumId == albumId) }
+        if let artistId { request = request.filter(SyncItem.Columns.artistId == artistId) }
+        return try request.fetchOne(db) != nil
+    }
+
+    static func resolvedTracksForSync(in db: Database) throws -> [TrackInfo] {
+        var trackIds = Set<Int64>()
+
+        let trackItems = try SyncItem
+            .filter(SyncItem.Columns.itemType == SyncItemType.track.rawValue)
+            .fetchAll(db)
+        for item in trackItems {
+            if let id = item.trackId { trackIds.insert(id) }
+        }
+
+        let albumItems = try SyncItem
+            .filter(SyncItem.Columns.itemType == SyncItemType.album.rawValue)
+            .fetchAll(db)
+        for item in albumItems {
+            if let albumId = item.albumId {
+                let tracks = try Track
+                    .filter(Track.Columns.albumId == albumId)
+                    .fetchAll(db)
+                for track in tracks {
+                    if let id = track.id { trackIds.insert(id) }
+                }
+            }
+        }
+
+        let artistItems = try SyncItem
+            .filter(SyncItem.Columns.itemType == SyncItemType.artist.rawValue)
+            .fetchAll(db)
+        for item in artistItems {
+            if let artistId = item.artistId {
+                let tracks = try Track
+                    .filter(Track.Columns.artistId == artistId)
+                    .fetchAll(db)
+                for track in tracks {
+                    if let id = track.id { trackIds.insert(id) }
+                }
+            }
+        }
+
+        guard !trackIds.isEmpty else { return [] }
+
+        let request = Track
+            .filter(trackIds.contains(Track.Columns.id))
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .order(Track.Columns.artistId, Track.Columns.albumId, Track.Columns.discNumber, Track.Columns.trackNumber)
+        return try TrackInfo.fetchAll(db, request)
+    }
+
+    static func allSyncLogs(in db: Database) throws -> [SyncLog] {
+        try SyncLog.fetchAll(db)
+    }
 }
 
 // Column references
@@ -183,5 +251,26 @@ extension PlaylistTrack {
         static let playlistId = Column("playlistId")
         static let trackId = Column("trackId")
         static let position = Column("position")
+    }
+}
+
+extension SyncItem {
+    enum Columns {
+        static let id = Column("id")
+        static let itemType = Column("itemType")
+        static let trackId = Column("trackId")
+        static let albumId = Column("albumId")
+        static let artistId = Column("artistId")
+        static let dateAdded = Column("dateAdded")
+    }
+}
+
+extension SyncLog {
+    enum Columns {
+        static let id = Column("id")
+        static let trackId = Column("trackId")
+        static let devicePath = Column("devicePath")
+        static let syncedAt = Column("syncedAt")
+        static let fileSize = Column("fileSize")
     }
 }

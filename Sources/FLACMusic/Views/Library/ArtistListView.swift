@@ -6,6 +6,7 @@ struct ArtistListView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @Environment(SyncManager.self) private var syncManager
     @State private var artists: [Artist] = []
     @State private var selectedArtist: Artist?
     @State private var albums: [AlbumInfo] = []
@@ -100,6 +101,7 @@ struct ArtistListView: View {
         .sheet(item: $selectedAlbum) { album in
             AlbumDetailView(album: album)
                 .environment(playerState)
+                .environment(syncManager)
                 .frame(minWidth: 500, minHeight: 400)
         }
     }
@@ -129,6 +131,21 @@ struct ArtistListView: View {
             .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if let artistId = artist.id {
+                if syncManager.isArtistInSyncList(artistId) {
+                    Button("Remove Artist from Sync List", role: .destructive) {
+                        if let item = syncManager.syncItems.first(where: { $0.itemType == .artist && $0.artistId == artistId }) {
+                            syncManager.removeSyncItem(item)
+                        }
+                    }
+                } else {
+                    Button("Add Artist to Sync List") {
+                        syncManager.addArtist(artistId)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
