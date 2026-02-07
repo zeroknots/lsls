@@ -1,8 +1,26 @@
 import AppKit
 import SwiftUI
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            for window in sender.windows where window.canBecomeMain {
+                window.makeKeyAndOrderFront(nil)
+                break
+            }
+        }
+        return true
+    }
+}
+
 @main
 struct LSLSApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     @State private var databaseManager = DatabaseManager.shared
     @State private var playerState = PlayerState()
     @State private var libraryManager = LibraryManager()
@@ -99,6 +117,12 @@ struct LSLSApp: App {
                 }
             }
         }
+
+        MenuBarExtra("LS", isInserted: .constant(true)) {
+            MenuBarPlayerView()
+                .environment(playerState)
+        }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
