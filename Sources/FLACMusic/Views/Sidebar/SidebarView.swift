@@ -9,10 +9,14 @@ enum SidebarSection: Hashable {
     case search
     case playlist(Playlist)
     case syncList
+    case plexAlbums
+    case plexArtists
+    case plexSettings
 }
 
 struct SidebarView: View {
     @Binding var selection: SidebarSection?
+    @Environment(PlexConnectionState.self) private var plexState
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
@@ -59,6 +63,19 @@ struct SidebarView: View {
                 .tag(SidebarSection.syncList)
             } header: {
                 Text("Rockbox")
+                    .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+                    .textCase(nil)
+            }
+
+            Section {
+                if plexState.isConnected {
+                    sidebarRow("Albums", icon: "square.grid.2x2", tag: .plexAlbums)
+                    sidebarRow("Artists", icon: "music.mic", tag: .plexArtists)
+                }
+                sidebarRow(plexState.isConnected ? "Settings" : "Connect", icon: "server.rack", tag: .plexSettings)
+            } header: {
+                Text("Plex")
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
                     .textCase(nil)
