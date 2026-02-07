@@ -63,7 +63,7 @@ struct SidebarView: View {
                 }
                 .tag(SidebarSection.syncList)
             } header: {
-                Text("Rockbox")
+                Text("DAP")
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
                     .textCase(nil)
@@ -140,7 +140,7 @@ struct SidebarView: View {
                                     Image(systemName: "arrow.triangle.2.circlepath")
                                         .font(.caption)
                                         .foregroundStyle(colors.accent)
-                                    Text("Syncing to Rockbox...")
+                                    Text("Syncing to DAP...")
                                         .font(.system(size: theme.typography.captionSize, weight: .medium))
                                         .foregroundStyle(colors.textPrimary)
                                 }
