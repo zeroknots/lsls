@@ -27,15 +27,43 @@ final class LibraryManager {
             return
         }
 
-        importStatus = "Importing \(files.count) files..."
+        // Filter out already-imported files before doing expensive ffprobe work
+        let existingPaths: Set<String> = (try? await db.dbQueue.read { dbConn in
+            let paths = try String.fetchAll(dbConn, Track.select(Track.Columns.filePath))
+            return Set(paths)
+        }) ?? []
+        let newFiles = files.filter { !existingPaths.contains($0.path) }
 
-        for (index, fileURL) in files.enumerated() {
-            importStatus = "Importing \(index + 1)/\(files.count)..."
-            await importFile(fileURL)
-            importProgress = Double(index + 1) / Double(files.count)
+        guard !newFiles.isEmpty else {
+            importStatus = "All \(files.count) files already imported"
+            isImporting = false
+            return
         }
 
-        importStatus = "Imported \(files.count) files"
+        importStatus = "Importing \(newFiles.count) files..."
+        let total = newFiles.count
+        var completed = 0
+
+        // Process in batches for concurrency without data race issues
+        let batchSize = 4
+        for batchStart in stride(from: 0, to: newFiles.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, newFiles.count)
+            let batch = Array(newFiles[batchStart..<batchEnd])
+
+            await withTaskGroup(of: Void.self) { group in
+                for fileURL in batch {
+                    group.addTask {
+                        await self.importFile(fileURL)
+                    }
+                }
+            }
+
+            completed += batch.count
+            importProgress = Double(completed) / Double(total)
+            importStatus = "Importing \(completed)/\(total)..."
+        }
+
+        importStatus = "Imported \(total) files"
         isImporting = false
         lastImportDate = Date()
     }

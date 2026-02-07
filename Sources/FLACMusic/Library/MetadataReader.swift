@@ -56,6 +56,8 @@ enum MetadataReader {
         var duration: TimeInterval
     }
 
+    private static let processTimeout: TimeInterval = 30
+
     private static func runFFProbe(for url: URL) async throws -> ProbeResult {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -74,8 +76,21 @@ enum MetadataReader {
 
                 do {
                     try process.run()
+
+                    // Kill process if it exceeds timeout
+                    let timer = DispatchSource.makeTimerSource(queue: .global())
+                    timer.schedule(deadline: .now() + processTimeout)
+                    timer.setEventHandler { process.terminate() }
+                    timer.resume()
+
                     let data = pipe.fileHandleForReading.readDataToEndOfFile()
                     process.waitUntilExit()
+                    timer.cancel()
+
+                    guard process.terminationStatus == 0 else {
+                        continuation.resume(throwing: MetadataError.processError(process.terminationStatus))
+                        return
+                    }
 
                     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                           let format = json["format"] as? [String: Any]
@@ -115,8 +130,15 @@ enum MetadataReader {
 
                 do {
                     try process.run()
+
+                    let timer = DispatchSource.makeTimerSource(queue: .global())
+                    timer.schedule(deadline: .now() + processTimeout)
+                    timer.setEventHandler { process.terminate() }
+                    timer.resume()
+
                     let data = pipe.fileHandleForReading.readDataToEndOfFile()
                     process.waitUntilExit()
+                    timer.cancel()
 
                     continuation.resume(returning: data.isEmpty ? nil : data)
                 } catch {
@@ -147,5 +169,6 @@ enum MetadataReader {
 
     enum MetadataError: Error {
         case parseError
+        case processError(Int32)
     }
 }
