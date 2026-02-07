@@ -106,6 +106,8 @@ struct ContentView: View {
             RecentlyAddedView(selectedAlbum: $selectedAlbum)
         case .playlist(let playlist):
             PlaylistDetailView(playlist: playlist)
+        case .smartPlaylist(let sp):
+            SmartPlaylistDetailView(smartPlaylist: sp)
         case .search:
             SearchResultsView(searchText: $searchText, selectedAlbum: $selectedAlbum)
         case .syncList:

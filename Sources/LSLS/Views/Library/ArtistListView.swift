@@ -200,32 +200,7 @@ struct ArtistListView: View {
 
             // Track list for this album
             ForEach(tracks) { trackInfo in
-                TrackRow(
-                    trackInfo: trackInfo,
-                    showAlbum: false,
-                    isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
-                    isInSyncList: trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false,
-                    playlists: playlists
-                ) {
-                    playerState.play(track: trackInfo, fromQueue: allArtistTracks)
-                } onAddToQueue: {
-                    playerState.addToQueueEnd(trackInfo)
-                } onSyncToggle: {
-                    guard let trackId = trackInfo.track.id else { return }
-                    if syncManager.isTrackInSyncList(trackId) {
-                        if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
-                            syncManager.removeSyncItem(item)
-                        }
-                    } else {
-                        syncManager.addTrack(trackId)
-                    }
-                } onAddToPlaylist: { playlist in
-                    addTrackToPlaylist(trackInfo, playlist: playlist)
-                } onDelete: {
-                    trackToDelete = trackInfo
-                } onEdit: {
-                    trackToEdit = trackInfo
-                }
+                albumTrackRow(for: trackInfo, allArtistTracks: allArtistTracks)
             }
             .padding(.horizontal, 8)
         }
@@ -271,6 +246,40 @@ struct ArtistListView: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func albumTrackRow(for trackInfo: TrackInfo, allArtistTracks: [TrackInfo]) -> some View {
+        let isPlaying = playerState.currentTrack?.track.id == trackInfo.track.id
+        let isInSyncList = trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
+        let isFavorite = trackInfo.track.isFavorite
+
+        TrackRow(
+            trackInfo: trackInfo,
+            showAlbum: false,
+            isPlaying: isPlaying,
+            isInSyncList: isInSyncList,
+            isFavorite: isFavorite,
+            playlists: playlists,
+            onPlay: { playerState.play(track: trackInfo, fromQueue: allArtistTracks) },
+            onAddToQueue: { playerState.addToQueueEnd(trackInfo) },
+            onSyncToggle: { handleSyncToggle(trackInfo) },
+            onAddToPlaylist: { playlist in addTrackToPlaylist(trackInfo, playlist: playlist) },
+            onDelete: { trackToDelete = trackInfo },
+            onEdit: { trackToEdit = trackInfo },
+            onFavoriteToggle: { toggleFavorite(trackInfo) }
+        )
+    }
+
+    private func handleSyncToggle(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        if syncManager.isTrackInSyncList(trackId) {
+            if let item = syncManager.syncItems.first(where: { $0.itemType == .track && $0.trackId == trackId }) {
+                syncManager.removeSyncItem(item)
+            }
+        } else {
+            syncManager.addTrack(trackId)
         }
     }
 
@@ -370,6 +379,14 @@ struct ArtistListView: View {
         } catch {
             print("Failed to add track to playlist: \(error)")
         }
+    }
+
+    private func toggleFavorite(_ trackInfo: TrackInfo) {
+        guard let trackId = trackInfo.track.id else { return }
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
+        }
+        loadAlbums()
     }
 
     private func deleteTrack(_ trackInfo: TrackInfo) {

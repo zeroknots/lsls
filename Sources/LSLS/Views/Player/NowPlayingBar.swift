@@ -5,6 +5,9 @@ struct NowPlayingBar: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
 
+    @State private var isFavorite = false
+    private let db = DatabaseManager.shared
+
     var body: some View {
         ZStack(alignment: .top) {
             // Main content below the progress bar
@@ -83,6 +86,16 @@ struct NowPlayingBar: View {
                 // Right: Queue toggle + Volume
                 HStack(spacing: 16) {
                     Button {
+                        toggleFavorite()
+                    } label: {
+                        Image(systemName: isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 14))
+                            .foregroundStyle(isFavorite ? .yellow : colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Favorite")
+
+                    Button {
                         withAnimation {
                             playerState.isQueueVisible.toggle()
                         }
@@ -125,5 +138,29 @@ struct NowPlayingBar: View {
             }
         )
         .shadow(color: .black.opacity(0.15), radius: 10, y: -5)
+        .onChange(of: playerState.currentTrack) {
+            loadFavoriteState()
+        }
+        .task {
+            loadFavoriteState()
+        }
+    }
+
+    private func loadFavoriteState() {
+        guard let trackId = playerState.currentTrack?.track.id else {
+            isFavorite = false
+            return
+        }
+        isFavorite = (try? db.dbQueue.read { db in
+            try LibraryQueries.isFavorite(trackId: trackId, in: db)
+        }) ?? false
+    }
+
+    private func toggleFavorite() {
+        guard let trackId = playerState.currentTrack?.track.id else { return }
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
+        }
+        isFavorite.toggle()
     }
 }

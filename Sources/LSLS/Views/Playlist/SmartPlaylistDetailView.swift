@@ -1,15 +1,16 @@
 import SwiftUI
 import GRDB
 
-struct PlaylistDetailView: View {
-    let playlist: Playlist
+struct SmartPlaylistDetailView: View {
+    let smartPlaylist: SmartPlaylist
     @Environment(PlayerState.self) private var playerState
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var tracks: [TrackInfo] = []
     @State private var playlists: [Playlist] = []
-    @State private var trackToEdit: TrackInfo? = nil
-    @State private var trackToDelete: TrackInfo? = nil
+    @State private var rules: [SmartPlaylistRule] = []
+    @State private var favorites: Set<Int64> = []
+    @State private var showEditor = false
 
     private let db = DatabaseManager.shared
 
@@ -27,13 +28,13 @@ struct PlaylistDetailView: View {
                             )
                         )
                         .frame(width: 120, height: 120)
-                    Image(systemName: "music.note.list")
+                    Image(systemName: "wand.and.stars")
                         .font(.system(size: 40))
                         .foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(playlist.name)
+                    Text(smartPlaylist.name)
                         .font(.system(size: theme.typography.titleSize, weight: .bold))
                         .foregroundStyle(colors.textPrimary)
 
@@ -58,6 +59,11 @@ struct PlaylistDetailView: View {
                             .buttonStyle(AccentOutlineButtonStyle())
                         }
                     }
+
+                    Button("Edit Rules") {
+                        showEditor = true
+                    }
+                    .buttonStyle(AccentOutlineButtonStyle())
                 }
 
                 Spacer()
@@ -71,18 +77,15 @@ struct PlaylistDetailView: View {
             // Track list
             if tracks.isEmpty {
                 ContentUnavailableView {
-                    Label("No Songs", systemImage: "music.note")
+                    Label("No Matching Songs", systemImage: "wand.and.stars")
                 } description: {
-                    Text("Add songs to this playlist")
+                    Text("Edit rules to match songs")
                 }
                 .foregroundStyle(colors.textSecondary)
             } else {
                 List {
                     ForEach(tracks) { trackInfo in
                         trackRow(for: trackInfo)
-                    }
-                    .onDelete { indexSet in
-                        removeTracks(at: indexSet)
                     }
                 }
                 .listStyle(.inset)
@@ -91,59 +94,47 @@ struct PlaylistDetailView: View {
             }
         }
         .background(colors.background)
-        .navigationTitle(playlist.name)
+        .navigationTitle(smartPlaylist.name)
         .task {
-            loadTracks()
+            loadRulesAndTracks()
             loadPlaylists()
+            loadFavorites()
         }
-        .sheet(item: $trackToEdit) { trackInfo in
-            TrackEditView(trackInfo: trackInfo) {
-                loadTracks()
+        .sheet(isPresented: $showEditor) {
+            SmartPlaylistEditorView(smartPlaylist: smartPlaylist) {
+                loadRulesAndTracks()
             }
-        }
-        .alert("Delete Track?", isPresented: Binding(
-            get: { trackToDelete != nil },
-            set: { if !$0 { trackToDelete = nil } }
-        )) {
-            Button("Cancel", role: .cancel) { trackToDelete = nil }
-            Button("Delete", role: .destructive) {
-                if let track = trackToDelete {
-                    deleteTrack(track)
-                    trackToDelete = nil
-                }
-            }
-        } message: {
-            Text("This will remove \"\(trackToDelete?.track.title ?? "")\" from your library and all playlists.")
         }
     }
 
     @ViewBuilder
     private func trackRow(for trackInfo: TrackInfo) -> some View {
-        let isPlaying = playerState.currentTrack?.track.id == trackInfo.track.id
-        let isFavorite = trackInfo.track.isFavorite
-
         TrackRow(
             trackInfo: trackInfo,
-            isPlaying: isPlaying,
-            isFavorite: isFavorite,
-            playlists: playlists,
-            onPlay: { playerState.play(track: trackInfo, fromQueue: tracks) },
-            onAddToQueue: { playerState.addToQueueEnd(trackInfo) },
-            onAddToPlaylist: { targetPlaylist in addTrackToPlaylist(trackInfo, playlist: targetPlaylist) },
-            onDelete: { trackToDelete = trackInfo },
-            onEdit: { trackToEdit = trackInfo },
-            onFavoriteToggle: { toggleFavorite(trackInfo) }
-        )
+            isPlaying: playerState.currentTrack?.track.id == trackInfo.track.id,
+            isFavorite: favorites.contains(trackInfo.track.id ?? -1),
+            playlists: playlists
+        ) {
+            playerState.play(track: trackInfo, fromQueue: tracks)
+        } onAddToQueue: {
+            playerState.addToQueueEnd(trackInfo)
+        } onAddToPlaylist: { targetPlaylist in
+            addTrackToPlaylist(trackInfo, playlist: targetPlaylist)
+        } onFavoriteToggle: {
+            toggleFavorite(trackInfo)
+        }
     }
 
-    private func loadTracks() {
-        guard let playlistId = playlist.id else { return }
+    private func loadRulesAndTracks() {
+        guard let smartPlaylistId = smartPlaylist.id else { return }
         do {
-            tracks = try db.dbQueue.read { db in
-                try LibraryQueries.playlistTracks(playlistId, in: db)
+            try db.dbQueue.read { db in
+                rules = try LibraryQueries.rulesForSmartPlaylist(smartPlaylistId, in: db)
+                tracks = try LibraryQueries.smartPlaylistTracks(rules, in: db)
             }
+            loadFavorites()
         } catch {
-            print("Failed to load playlist tracks: \(error)")
+            print("Failed to load smart playlist rules and tracks: \(error)")
         }
     }
 
@@ -157,56 +148,48 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
-        guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
+    private func loadFavorites() {
         do {
-            try db.dbQueue.write { dbConn in
-                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
+            favorites = try db.dbQueue.read { db in
+                var favoriteSet = Set<Int64>()
+                for trackInfo in tracks {
+                    if let trackId = trackInfo.track.id {
+                        if try LibraryQueries.isFavorite(trackId: trackId, in: db) {
+                            favoriteSet.insert(trackId)
+                        }
+                    }
+                }
+                return favoriteSet
             }
         } catch {
-            print("Failed to add track to playlist: \(error)")
+            print("Failed to load favorites: \(error)")
         }
     }
 
     private func toggleFavorite(_ trackInfo: TrackInfo) {
         guard let trackId = trackInfo.track.id else { return }
-        try? db.dbQueue.write { dbConn in
-            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
-        }
-        loadTracks()
-    }
-
-    private func deleteTrack(_ trackInfo: TrackInfo) {
-        guard let trackId = trackInfo.track.id else { return }
-        if playerState.currentTrack?.track.id == trackId {
-            playerState.playNext()
-        }
         do {
-            try db.dbQueue.write { dbConn in
-                try LibraryQueries.deleteTrack(trackId, in: dbConn)
+            try db.dbQueue.write { db in
+                try LibraryQueries.toggleFavorite(trackId: trackId, in: db)
             }
-            loadTracks()
+            if favorites.contains(trackId) {
+                favorites.remove(trackId)
+            } else {
+                favorites.insert(trackId)
+            }
         } catch {
-            print("Failed to delete track: \(error)")
+            print("Failed to toggle favorite: \(error)")
         }
     }
 
-    private func removeTracks(at offsets: IndexSet) {
-        guard let playlistId = playlist.id else { return }
+    private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
+        guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
         do {
-            try db.dbQueue.write { dbConn in
-                for index in offsets {
-                    if let trackId = tracks[index].track.id {
-                        try PlaylistTrack
-                            .filter(PlaylistTrack.Columns.playlistId == playlistId)
-                            .filter(PlaylistTrack.Columns.trackId == trackId)
-                            .deleteAll(dbConn)
-                    }
-                }
+            try db.dbQueue.write { db in
+                try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: db)
             }
-            tracks.remove(atOffsets: offsets)
         } catch {
-            print("Failed to remove tracks: \(error)")
+            print("Failed to add track to playlist: \(error)")
         }
     }
 }

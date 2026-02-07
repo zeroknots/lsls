@@ -297,6 +297,123 @@ enum LibraryQueries {
             """)
     }
 
+    // MARK: - Favorites
+
+    static func toggleFavorite(trackId: Int64, in db: Database) throws {
+        try db.execute(
+            sql: "UPDATE track SET isFavorite = NOT isFavorite WHERE id = ?",
+            arguments: [trackId]
+        )
+    }
+
+    static func isFavorite(trackId: Int64, in db: Database) throws -> Bool {
+        try Bool.fetchOne(db, sql: "SELECT isFavorite FROM track WHERE id = ?", arguments: [trackId]) ?? false
+    }
+
+    // MARK: - Play Tracking
+
+    static func recordPlay(trackId: Int64, in db: Database) throws {
+        try db.execute(
+            sql: "UPDATE track SET playCount = playCount + 1, lastPlayedAt = ? WHERE id = ?",
+            arguments: [Date(), trackId]
+        )
+    }
+
+    // MARK: - Smart Playlists
+
+    static func allSmartPlaylists(in db: Database) throws -> [SmartPlaylist] {
+        try SmartPlaylist
+            .order(SmartPlaylist.Columns.name)
+            .fetchAll(db)
+    }
+
+    static func rulesForSmartPlaylist(_ smartPlaylistId: Int64, in db: Database) throws -> [SmartPlaylistRule] {
+        try SmartPlaylistRule
+            .filter(SmartPlaylistRule.Columns.smartPlaylistId == smartPlaylistId)
+            .order(SmartPlaylistRule.Columns.position)
+            .fetchAll(db)
+    }
+
+    static func smartPlaylistTracks(_ rules: [SmartPlaylistRule], in db: Database) throws -> [TrackInfo] {
+        guard !rules.isEmpty else { return [] }
+
+        var conditions: [String] = []
+        var arguments: [DatabaseValueConvertible] = []
+        var needsArtistJoin = false
+
+        for rule in rules {
+            switch rule.field {
+            case .playCount:
+                let op = sqlOperator(rule.operator)
+                conditions.append("track.playCount \(op) ?")
+                arguments.append(Int(rule.value) ?? 0)
+
+            case .isFavorite:
+                conditions.append("track.isFavorite = 1")
+
+            case .artist:
+                needsArtistJoin = true
+                let op = rule.operator
+                if op == .contains {
+                    conditions.append("artist.name LIKE ?")
+                    arguments.append("%\(rule.value)%")
+                } else {
+                    conditions.append("artist.name = ?")
+                    arguments.append(rule.value)
+                }
+
+            case .genre:
+                if rule.operator == .contains {
+                    conditions.append("track.genre LIKE ?")
+                    arguments.append("%\(rule.value)%")
+                } else {
+                    conditions.append("track.genre = ?")
+                    arguments.append(rule.value)
+                }
+
+            case .dateAdded:
+                let op = sqlOperator(rule.operator)
+                conditions.append("track.dateAdded \(op) ?")
+                arguments.append(rule.value)
+
+            case .lastPlayedAt:
+                let op = sqlOperator(rule.operator)
+                conditions.append("track.lastPlayedAt \(op) ?")
+                arguments.append(rule.value)
+            }
+        }
+
+        let whereClause = conditions.joined(separator: " AND ")
+        let artistJoin = needsArtistJoin ? "" : "LEFT JOIN artist ON artist.id = track.artistId"
+
+        let sql = """
+            SELECT track.*, album.*, artist.*
+            FROM track
+            LEFT JOIN album ON album.id = track.albumId
+            LEFT JOIN artist ON artist.id = track.artistId
+            WHERE \(whereClause)
+            ORDER BY track.playCount DESC, track.title ASC
+            """
+
+        return try TrackInfo.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+    }
+
+    private static func sqlOperator(_ op: SmartPlaylistOperator) -> String {
+        switch op {
+        case .greaterThan: ">"
+        case .lessThan: "<"
+        case .equals: "="
+        case .contains: "LIKE"
+        case .isTrue: "="
+        }
+    }
+
+    static func deleteSmartPlaylist(_ smartPlaylistId: Int64, in db: Database) throws {
+        _ = try SmartPlaylist.deleteOne(db, id: smartPlaylistId)
+    }
+
+    // MARK: - Playlists
+
     static func addTrackToPlaylist(
         trackId: Int64,
         playlistId: Int64,
@@ -340,6 +457,9 @@ extension Track {
         static let duration = Column("duration")
         static let fileSize = Column("fileSize")
         static let dateAdded = Column("dateAdded")
+        static let playCount = Column("playCount")
+        static let lastPlayedAt = Column("lastPlayedAt")
+        static let isFavorite = Column("isFavorite")
     }
 }
 
@@ -384,5 +504,24 @@ extension SyncLog {
         static let devicePath = Column("devicePath")
         static let syncedAt = Column("syncedAt")
         static let fileSize = Column("fileSize")
+    }
+}
+
+extension SmartPlaylist {
+    enum Columns {
+        static let id = Column("id")
+        static let name = Column("name")
+        static let dateCreated = Column("dateCreated")
+    }
+}
+
+extension SmartPlaylistRule {
+    enum Columns {
+        static let id = Column("id")
+        static let smartPlaylistId = Column("smartPlaylistId")
+        static let field = Column("field")
+        static let `operator` = Column("operator")
+        static let value = Column("value")
+        static let position = Column("position")
     }
 }

@@ -6,6 +6,9 @@ struct FullPlayerView: View {
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
 
+    @State private var isFavorite = false
+    private let db = DatabaseManager.shared
+
     var body: some View {
         ZStack {
             // Background with ambient color effect
@@ -36,6 +39,15 @@ struct FullPlayerView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(colors.textPrimary)
                         .multilineTextAlignment(.center)
+
+                    Button {
+                        toggleFavorite()
+                    } label: {
+                        Image(systemName: isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 20))
+                            .foregroundStyle(isFavorite ? .yellow : colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
 
                     Text(playerState.currentTrack?.artist?.name ?? "")
                         .font(.system(size: theme.typography.headlineSize))
@@ -88,5 +100,29 @@ struct FullPlayerView: View {
             .padding(48)
         }
         .frame(minWidth: 400, minHeight: 550)
+        .onChange(of: playerState.currentTrack) {
+            loadFavoriteState()
+        }
+        .task {
+            loadFavoriteState()
+        }
+    }
+
+    private func loadFavoriteState() {
+        guard let trackId = playerState.currentTrack?.track.id else {
+            isFavorite = false
+            return
+        }
+        isFavorite = (try? db.dbQueue.read { db in
+            try LibraryQueries.isFavorite(trackId: trackId, in: db)
+        }) ?? false
+    }
+
+    private func toggleFavorite() {
+        guard let trackId = playerState.currentTrack?.track.id else { return }
+        try? db.dbQueue.write { dbConn in
+            try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
+        }
+        isFavorite.toggle()
     }
 }

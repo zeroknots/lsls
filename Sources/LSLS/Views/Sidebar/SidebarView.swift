@@ -8,6 +8,7 @@ enum SidebarSection: Hashable {
     case recentlyAdded
     case search
     case playlist(Playlist)
+    case smartPlaylist(SmartPlaylist)
     case syncList
     case plexAlbums
     case plexArtists
@@ -22,7 +23,9 @@ struct SidebarView: View {
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
     @State private var playlists: [Playlist] = []
+    @State private var smartPlaylists: [SmartPlaylist] = []
     @State private var showNewPlaylist = false
+    @State private var showNewSmartPlaylist = false
     @State private var newPlaylistName = ""
 
     private let db = DatabaseManager.shared
@@ -100,8 +103,22 @@ struct SidebarView: View {
                         }
                 }
 
-                Button {
-                    showNewPlaylist = true
+                ForEach(smartPlaylists) { sp in
+                    sidebarRow(sp.name, icon: "wand.and.stars", tag: .smartPlaylist(sp))
+                        .contextMenu {
+                            Button("Delete", role: .destructive) {
+                                deleteSmartPlaylist(sp)
+                            }
+                        }
+                }
+
+                Menu {
+                    Button("New Playlist") {
+                        showNewPlaylist = true
+                    }
+                    Button("New Smart Playlist") {
+                        showNewSmartPlaylist = true
+                    }
                 } label: {
                     Label {
                         Text("New Playlist")
@@ -173,6 +190,7 @@ struct SidebarView: View {
         .navigationTitle("LSLS")
         .task {
             loadPlaylists()
+            loadSmartPlaylists()
         }
         .alert("New Playlist", isPresented: $showNewPlaylist) {
             TextField("Playlist name", text: $newPlaylistName)
@@ -181,6 +199,11 @@ struct SidebarView: View {
             }
             Button("Create") {
                 createPlaylist()
+            }
+        }
+        .sheet(isPresented: $showNewSmartPlaylist) {
+            SmartPlaylistEditorView(smartPlaylist: nil) {
+                loadSmartPlaylists()
             }
         }
     }
@@ -234,6 +257,28 @@ struct SidebarView: View {
             loadPlaylists()
         } catch {
             print("Failed to delete playlist: \(error)")
+        }
+    }
+
+    private func loadSmartPlaylists() {
+        do {
+            smartPlaylists = try db.dbQueue.read { db in
+                try LibraryQueries.allSmartPlaylists(in: db)
+            }
+        } catch {
+            print("Failed to load smart playlists: \(error)")
+        }
+    }
+
+    private func deleteSmartPlaylist(_ sp: SmartPlaylist) {
+        guard let id = sp.id else { return }
+        do {
+            try db.dbQueue.write { dbConn in
+                try LibraryQueries.deleteSmartPlaylist(id, in: dbConn)
+            }
+            loadSmartPlaylists()
+        } catch {
+            print("Failed to delete smart playlist: \(error)")
         }
     }
 

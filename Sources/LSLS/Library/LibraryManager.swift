@@ -183,7 +183,10 @@ final class LibraryManager {
                         discNumber: metadata.discNumber ?? 1,
                         duration: metadata.duration,
                         fileSize: metadata.fileSize,
-                        dateAdded: Date()
+                        dateAdded: Date(),
+                        playCount: 0,
+                        lastPlayedAt: nil,
+                        isFavorite: false
                     )
                     try track.insert(dbConn)
                 }
