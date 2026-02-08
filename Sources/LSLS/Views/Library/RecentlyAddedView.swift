@@ -10,6 +10,8 @@ struct RecentlyAddedView: View {
     @State private var albums: [AlbumInfo] = []
     @Binding var selectedAlbum: Album?
     @State private var albumToDelete: AlbumInfo? = nil
+    @State private var selectedAlbumIds: Set<Int64> = []
+    @State private var showMergeSheet = false
 
     private let db = DatabaseManager.shared
 
@@ -20,6 +22,13 @@ struct RecentlyAddedView: View {
         ), spacing: theme.spacing.gridSpacing)]
     }
 
+    private var selectedAlbumInfos: [AlbumInfo] {
+        albums.filter { albumInfo in
+            guard let id = albumInfo.album.id else { return false }
+            return selectedAlbumIds.contains(id)
+        }
+    }
+
     var body: some View {
         recentGrid
         .background(colors.background)
@@ -28,6 +37,12 @@ struct RecentlyAddedView: View {
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadRecent()
+        }
+        .sheet(isPresented: $showMergeSheet) {
+            MergeAlbumsView(selectedAlbums: selectedAlbumInfos) {
+                selectedAlbumIds.removeAll()
+                loadRecent()
+            }
         }
         .alert("Delete Album?", isPresented: Binding(
             get: { albumToDelete != nil },
@@ -58,27 +73,54 @@ struct RecentlyAddedView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
                     ForEach(albums) { albumInfo in
-                        AlbumCard(albumInfo: albumInfo) {
-                            selectedAlbum = albumInfo.album
+                        let albumId = albumInfo.album.id ?? -1
+                        let isInSelection = selectedAlbumIds.contains(albumId)
+
+                        AlbumCard(
+                            albumInfo: albumInfo,
+                            isSelected: isInSelection
+                        ) { withCommand in
+                            if withCommand {
+                                if selectedAlbumIds.contains(albumId) {
+                                    selectedAlbumIds.remove(albumId)
+                                } else {
+                                    selectedAlbumIds.insert(albumId)
+                                }
+                            } else {
+                                selectedAlbumIds.removeAll()
+                                selectedAlbum = albumInfo.album
+                            }
                         }
                         .contextMenu {
-                            if let albumId = albumInfo.album.id {
-                                if syncManager.isAlbumInSyncList(albumId) {
-                                    Button("Remove Album from Sync List", role: .destructive) {
-                                        if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == albumId }) {
-                                            syncManager.removeSyncItem(item)
-                                        }
-                                    }
-                                } else {
-                                    Button("Add Album to Sync List") {
-                                        syncManager.addAlbum(albumId)
-                                    }
+                            if isInSelection && selectedAlbumIds.count >= 2 {
+                                Button("Merge...") {
+                                    showMergeSheet = true
                                 }
 
                                 Divider()
 
-                                Button("Delete Album", role: .destructive) {
-                                    albumToDelete = albumInfo
+                                Button("Delete \(selectedAlbumIds.count) Albums", role: .destructive) {
+                                    deleteSelectedAlbums()
+                                }
+                            } else {
+                                if let aid = albumInfo.album.id {
+                                    if syncManager.isAlbumInSyncList(aid) {
+                                        Button("Remove Album from Sync List", role: .destructive) {
+                                            if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == aid }) {
+                                                syncManager.removeSyncItem(item)
+                                            }
+                                        }
+                                    } else {
+                                        Button("Add Album to Sync List") {
+                                            syncManager.addAlbum(aid)
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    Button("Delete Album", role: .destructive) {
+                                        albumToDelete = albumInfo
+                                    }
                                 }
                             }
                         }
@@ -86,6 +128,17 @@ struct RecentlyAddedView: View {
                 }
                 .padding(theme.spacing.contentPadding)
             }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedAlbumIds.removeAll()
+        }
+        .onKeyPress(.escape) {
+            if !selectedAlbumIds.isEmpty {
+                selectedAlbumIds.removeAll()
+                return .handled
+            }
+            return .ignored
         }
         .navigationTitle("Recently Added")
     }
@@ -98,6 +151,20 @@ struct RecentlyAddedView: View {
             loadRecent()
         } catch {
             print("Failed to delete album: \(error)")
+        }
+    }
+
+    private func deleteSelectedAlbums() {
+        do {
+            try db.dbPool.write { dbConn in
+                for albumId in selectedAlbumIds {
+                    try LibraryQueries.deleteAlbum(albumId, in: dbConn)
+                }
+            }
+            selectedAlbumIds.removeAll()
+            loadRecent()
+        } catch {
+            print("Failed to delete albums: \(error)")
         }
     }
 

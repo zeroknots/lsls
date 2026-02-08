@@ -1,8 +1,10 @@
 import SwiftUI
+import AppKit
 
 struct AlbumCard: View {
     let albumInfo: AlbumInfo
-    var onTap: (() -> Void)?
+    var isSelected: Bool = false
+    var onTap: ((_ withCommand: Bool) -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
@@ -12,10 +14,10 @@ struct AlbumCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 AlbumArtView(album: albumInfo.album, size: size)
 
-                if isHovered {
+                if isHovered && !isSelected {
                     RoundedRectangle(cornerRadius: theme.shapes.albumArtRadius)
                         .fill(.black.opacity(0.3))
                         .frame(width: size, height: size)
@@ -23,6 +25,18 @@ struct AlbumCard: View {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: size * 0.25))
                         .foregroundStyle(.white.opacity(0.9))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                if isSelected {
+                    RoundedRectangle(cornerRadius: theme.shapes.albumArtRadius)
+                        .stroke(colors.accent, lineWidth: 2.5)
+                        .frame(width: size, height: size)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white, colors.accent)
+                        .padding(6)
                 }
             }
 
@@ -41,10 +55,13 @@ struct AlbumCard: View {
             }
         }
         .frame(width: size)
-        .scaleEffect(isHovered ? theme.effects.hoverScale : 1.0)
+        .scaleEffect(isHovered && !isSelected ? theme.effects.hoverScale : 1.0)
         .animation(.spring(duration: 0.2), value: isHovered)
         .onHover { isHovered = $0 }
-        .onTapGesture { onTap?() }
+        .onTapGesture {
+            let withCommand = NSEvent.modifierFlags.contains(.command)
+            onTap?(withCommand)
+        }
         .draggable(LibraryDragItem.album(albumInfo))
     }
 }

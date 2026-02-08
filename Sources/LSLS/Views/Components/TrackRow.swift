@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 
 struct TrackRow: View {
     let trackInfo: TrackInfo
     let showAlbum: Bool
     let isPlaying: Bool
+    var isSelected: Bool
     var onPlay: () -> Void
     var onSyncToggle: (() -> Void)?
     var isInSyncList: Bool
@@ -15,15 +17,17 @@ struct TrackRow: View {
     var onEdit: (() -> Void)?
     var onFavoriteToggle: (() -> Void)?
     var onAnalyzeBPM: (() -> Void)?
+    var onSelect: ((_ withCommand: Bool) -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, isFavorite: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil, onFavoriteToggle: (() -> Void)? = nil, onAnalyzeBPM: (() -> Void)? = nil) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isSelected: Bool = false, isInSyncList: Bool = false, isFavorite: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil, onFavoriteToggle: (() -> Void)? = nil, onAnalyzeBPM: (() -> Void)? = nil, onSelect: ((_ withCommand: Bool) -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
+        self.isSelected = isSelected
         self.isInSyncList = isInSyncList
         self.isFavorite = isFavorite
         self.playlists = playlists
@@ -35,6 +39,7 @@ struct TrackRow: View {
         self.onEdit = onEdit
         self.onFavoriteToggle = onFavoriteToggle
         self.onAnalyzeBPM = onAnalyzeBPM
+        self.onSelect = onSelect
     }
 
     var body: some View {
@@ -44,9 +49,12 @@ struct TrackRow: View {
                 if isPlaying {
                     Image(systemName: "speaker.wave.2.fill")
                         .foregroundStyle(colors.accent)
-                } else if isHovered {
+                } else if isHovered && !isSelected {
                     Image(systemName: "play.fill")
                         .foregroundStyle(colors.textSecondary)
+                } else if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(colors.accent)
                 } else if let num = trackInfo.track.trackNumber {
                     Text("\(num)")
                         .foregroundStyle(colors.textTertiary)
@@ -104,7 +112,7 @@ struct TrackRow: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: theme.shapes.sidebarItemRadius)
-                .fill(isHovered ? colors.surfaceHover : .clear)
+                .fill(isSelected ? colors.accent.opacity(0.15) : (isHovered ? colors.surfaceHover : .clear))
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -112,6 +120,12 @@ struct TrackRow: View {
         .draggable(LibraryDragItem.track(trackInfo))
         .onTapGesture(count: 2) {
             onPlay()
+        }
+        .onTapGesture(count: 1) {
+            if let onSelect {
+                let withCommand = NSEvent.modifierFlags.contains(.command)
+                onSelect(withCommand)
+            }
         }
         .contextMenu {
             if let onEdit {
