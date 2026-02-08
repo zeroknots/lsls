@@ -14,12 +14,13 @@ struct TrackRow: View {
     var onDelete: (() -> Void)?
     var onEdit: (() -> Void)?
     var onFavoriteToggle: (() -> Void)?
+    var onAnalyzeBPM: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
-    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, isFavorite: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil, onFavoriteToggle: (() -> Void)? = nil) {
+    init(trackInfo: TrackInfo, showAlbum: Bool = true, isPlaying: Bool = false, isInSyncList: Bool = false, isFavorite: Bool = false, playlists: [Playlist] = [], onPlay: @escaping () -> Void, onAddToQueue: (() -> Void)? = nil, onSyncToggle: (() -> Void)? = nil, onAddToPlaylist: ((Playlist) -> Void)? = nil, onDelete: (() -> Void)? = nil, onEdit: (() -> Void)? = nil, onFavoriteToggle: (() -> Void)? = nil, onAnalyzeBPM: (() -> Void)? = nil) {
         self.trackInfo = trackInfo
         self.showAlbum = showAlbum
         self.isPlaying = isPlaying
@@ -33,6 +34,7 @@ struct TrackRow: View {
         self.onDelete = onDelete
         self.onEdit = onEdit
         self.onFavoriteToggle = onFavoriteToggle
+        self.onAnalyzeBPM = onAnalyzeBPM
     }
 
     var body: some View {
@@ -133,6 +135,12 @@ struct TrackRow: View {
             if let onSyncToggle {
                 Button(isInSyncList ? "Remove from Sync List" : "Add to Sync List") {
                     onSyncToggle()
+                }
+            }
+
+            if let onAnalyzeBPM {
+                Button("Analyze BPM") {
+                    onAnalyzeBPM()
                 }
             }
 

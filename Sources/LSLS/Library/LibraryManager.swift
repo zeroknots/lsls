@@ -184,7 +184,8 @@ final class LibraryManager {
                     dateAdded: Date(),
                     playCount: 0,
                     lastPlayedAt: nil,
-                    isFavorite: false
+                    isFavorite: false,
+                    bpm: metadata.bpm
                 )
                 try track.insert(dbConn)
 
@@ -213,6 +214,26 @@ final class LibraryManager {
             }
         } catch {
             print("Failed to import \(fileURL.lastPathComponent): \(error)")
+        }
+    }
+
+    nonisolated static func analyzeBPM(for track: Track) async {
+        guard let trackId = track.id, !track.filePath.hasPrefix("http") else { return }
+        let url = URL(fileURLWithPath: track.filePath)
+
+        let bpm: Double?
+        if let metadata = try? await MetadataReader.read(from: url), let tagBPM = metadata.bpm {
+            bpm = tagBPM
+        } else {
+            bpm = await MetadataReader.detectBPMWithAubio(from: url)
+        }
+
+        guard let bpm else { return }
+        try? await DatabaseManager.shared.dbPool.write { dbConn in
+            try dbConn.execute(
+                sql: "UPDATE track SET bpm = ? WHERE id = ?",
+                arguments: [bpm, trackId]
+            )
         }
     }
 }

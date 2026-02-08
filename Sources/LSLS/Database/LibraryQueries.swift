@@ -380,6 +380,11 @@ enum LibraryQueries {
                 let op = sqlOperator(rule.operator)
                 conditions.append("track.lastPlayedAt \(op) ?")
                 arguments.append(rule.value)
+
+            case .bpm:
+                let op = sqlOperator(rule.operator)
+                conditions.append("track.bpm \(op) ?")
+                arguments.append(Double(rule.value) ?? 0)
             }
         }
 
@@ -460,6 +465,7 @@ extension Track {
         static let playCount = Column("playCount")
         static let lastPlayedAt = Column("lastPlayedAt")
         static let isFavorite = Column("isFavorite")
+        static let bpm = Column("bpm")
     }
 }
 

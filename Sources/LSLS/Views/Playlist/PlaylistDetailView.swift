@@ -132,7 +132,8 @@ struct PlaylistDetailView: View {
             onAddToPlaylist: { targetPlaylist in addTrackToPlaylist(trackInfo, playlist: targetPlaylist) },
             onDelete: { trackToDelete = trackInfo },
             onEdit: { trackToEdit = trackInfo },
-            onFavoriteToggle: { toggleFavorite(trackInfo) }
+            onFavoriteToggle: { toggleFavorite(trackInfo) },
+            onAnalyzeBPM: { Task { await LibraryManager.analyzeBPM(for: trackInfo.track) } }
         )
     }
 
