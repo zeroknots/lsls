@@ -32,6 +32,13 @@ private struct GeneralSettingsTab: View {
                     }
                     .disabled(libraryManager.isImporting)
 
+                    Button("Scan Missing Artwork") {
+                        Task {
+                            await libraryManager.scanMissingArtwork()
+                        }
+                    }
+                    .disabled(libraryManager.isImporting)
+
                     if libraryManager.isImporting {
                         ProgressView()
                             .controlSize(.small)

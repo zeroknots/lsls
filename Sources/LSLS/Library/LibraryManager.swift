@@ -63,6 +63,9 @@ final class LibraryManager {
             importStatus = "Importing \(completed)/\(total)..."
         }
 
+        importStatus = "Scanning for missing artwork..."
+        await scanMissingArtwork(folderURL: folderURL)
+
         importStatus = "Imported \(total) files"
         isImporting = false
         lastImportDate = Date()
@@ -97,7 +100,7 @@ final class LibraryManager {
         "art.jpg", "art.jpeg", "art.png",
     ]
 
-    nonisolated private static func findFolderArtworkData(for fileURL: URL) -> Data? {
+    nonisolated static func findFolderArtworkData(for fileURL: URL) -> Data? {
         let folder = fileURL.deletingLastPathComponent()
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(atPath: folder.path) else { return nil }
@@ -215,6 +218,69 @@ final class LibraryManager {
         } catch {
             print("Failed to import \(fileURL.lastPathComponent): \(error)")
         }
+    }
+
+    func scanMissingArtwork(folderURL: URL? = nil) async {
+        isImporting = true
+        importStatus = "Scanning for missing artwork..."
+
+        let db = DatabaseManager.shared
+
+        let albumsNeedingArtwork: [(albumId: Int64, trackPath: String)] = (try? await db.dbPool.read { dbConn in
+            let rows = try Row.fetchAll(dbConn, sql: """
+                SELECT a.id, t.filePath
+                FROM album a
+                JOIN track t ON t.albumId = a.id
+                WHERE a.artworkPath IS NULL
+                GROUP BY a.id
+                """)
+            return rows.map { (albumId: $0["id"] as Int64, trackPath: $0["filePath"] as String) }
+        }) ?? []
+
+        guard !albumsNeedingArtwork.isEmpty else {
+            importStatus = "All albums have artwork"
+            isImporting = false
+            return
+        }
+
+        let total = albumsNeedingArtwork.count
+        var found = 0
+
+        for (index, item) in albumsNeedingArtwork.enumerated() {
+            importStatus = "Extracting artwork \(index + 1)/\(total)..."
+            let fileURL = URL(fileURLWithPath: item.trackPath)
+
+            print("scanMissingArtwork: [\(index + 1)/\(total)] extracting from \(fileURL.lastPathComponent)...")
+            let start = Date()
+
+            guard let artworkData = await MetadataReader.extractArtwork(from: fileURL) else {
+                print("scanMissingArtwork: FAILED - no data for album \(item.albumId)")
+                continue
+            }
+
+            let elapsed = Date().timeIntervalSince(start)
+            print("scanMissingArtwork: got \(artworkData.count) bytes in \(String(format: "%.1f", elapsed))s")
+
+            guard let image = NSImage(data: artworkData),
+                  let savedPath = ArtworkCache.shared.saveArtwork(image, for: item.albumId) else {
+                print("scanMissingArtwork: FAILED to save image for album \(item.albumId)")
+                continue
+            }
+
+            try? await db.dbPool.write { dbConn in
+                if var album = try Album.fetchOne(dbConn, key: item.albumId) {
+                    album.artworkPath = savedPath
+                    try album.update(dbConn)
+                }
+            }
+
+            ArtworkCache.shared.clearMemoryCache()
+            found += 1
+            print("scanMissingArtwork: SUCCESS album \(item.albumId) -> \(savedPath)")
+        }
+
+        importStatus = found > 0 ? "Found artwork for \(found) album\(found == 1 ? "" : "s")" : "No artwork found"
+        isImporting = false
     }
 
     nonisolated static func analyzeBPM(for track: Track) async {
