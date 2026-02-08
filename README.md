@@ -2,7 +2,7 @@
   <img src=".github/logo.png" width="128" height="128" alt="LSLS">
 </p>
 
-<h1 align="center">LSLS</h1> (lossless)
+<h1 align="center">LSLS - lossless</h1> 
 
 <p align="center">
   A native macOS music player for local libraries and Plex servers.
