@@ -17,6 +17,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private struct ThemedContentView: View {
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        ContentView()
+            .environment(\.theme, themeManager.current)
+            .environment(\.themeColors, themeManager.resolvedColors)
+            .preferredColorScheme(themeManager.preferredColorScheme)
+            .accentColor(themeManager.resolvedColors.accent)
+    }
+}
+
 @main
 struct LSLSApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -36,16 +48,12 @@ struct LSLSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ThemedContentView()
                 .environment(playerState)
                 .environment(libraryManager)
                 .environment(plexState)
                 .environment(themeManager)
-                .environment(\.theme, themeManager.current)
-                .environment(\.themeColors, themeManager.resolvedColors)
                 .environment(syncManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-                .accentColor(themeManager.resolvedColors.accent)
                 .frame(minWidth: 900, minHeight: 600)
                 .task { updateChecker.checkForUpdates() }
         }
