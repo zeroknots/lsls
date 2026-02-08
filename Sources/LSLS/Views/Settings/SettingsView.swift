@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     var body: some View {
@@ -13,7 +14,7 @@ struct SettingsView: View {
             DAPSyncSettingsTab()
                 .tabItem { Label("DAP Sync", systemImage: "arrow.triangle.2.circlepath") }
         }
-        .frame(width: 480, height: 340)
+        .frame(width: 480, height: 500)
     }
 }
 
@@ -145,6 +146,7 @@ private struct ThemeRow: View {
 
 private struct DAPSyncSettingsTab: View {
     @Environment(SyncManager.self) private var syncManager
+    @Environment(RockboxThemeManager.self) private var themeManager
 
     var body: some View {
         @Bindable var syncManager = syncManager
@@ -174,6 +176,7 @@ private struct DAPSyncSettingsTab: View {
                 Toggle("Auto-sync when device is connected", isOn: $syncManager.settings.autoSyncEnabled)
                 Toggle("Sync play counts & ratings", isOn: $syncManager.settings.syncPlayCountsEnabled)
                 Toggle("Export playlists to device", isOn: $syncManager.settings.syncPlaylistsEnabled)
+                Toggle("Install themes to device", isOn: $syncManager.settings.syncThemesEnabled)
 
                 LabeledContent("Items in sync list") {
                     Text("\(syncManager.syncItems.count)")
@@ -183,6 +186,54 @@ private struct DAPSyncSettingsTab: View {
                     LabeledContent("Last sync") {
                         Text(lastSync, style: .relative)
                     }
+                }
+            }
+
+            Section("Rockbox Themes") {
+                if themeManager.installedThemes.isEmpty {
+                    Text("No themes imported")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(themeManager.installedThemes) { theme in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(theme.name)
+                                Text(theme.dateAdded, style: .date)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Install") {
+                                installTheme(theme)
+                            }
+                            .disabled(!syncManager.isDeviceConnected || themeManager.isInstalling)
+                            Button(role: .destructive) {
+                                try? themeManager.deleteTheme(theme)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+
+                HStack {
+                    Button("Import Theme (.zip)...") {
+                        importTheme()
+                    }
+
+                    if themeManager.installedThemes.count > 1 {
+                        Button("Install All") {
+                            installAllThemes()
+                        }
+                        .disabled(!syncManager.isDeviceConnected || themeManager.isInstalling)
+                    }
+                }
+
+                if themeManager.isInstalling {
+                    Text(themeManager.installStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -199,6 +250,49 @@ private struct DAPSyncSettingsTab: View {
         panel.message = "Select Rockbox mount point"
         if panel.runModal() == .OK, let url = panel.url {
             syncManager.settings.mountPath = url.path
+        }
+    }
+
+    private func importTheme() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.zip]
+        panel.allowsMultipleSelection = true
+        panel.message = "Select Rockbox theme zip files"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            do {
+                try themeManager.importTheme(from: url)
+            } catch {
+                print("Failed to import theme: \(error)")
+            }
+        }
+    }
+
+    private func installTheme(_ theme: RockboxTheme) {
+        Task {
+            do {
+                try await themeManager.installThemesToDevice(
+                    themes: [theme],
+                    deviceMountPath: syncManager.settings.mountPath
+                )
+            } catch {
+                print("Failed to install theme: \(error)")
+            }
+        }
+    }
+
+    private func installAllThemes() {
+        Task {
+            do {
+                try await themeManager.installThemesToDevice(
+                    themes: themeManager.installedThemes,
+                    deviceMountPath: syncManager.settings.mountPath
+                )
+            } catch {
+                print("Failed to install themes: \(error)")
+            }
         }
     }
 }
