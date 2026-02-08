@@ -27,16 +27,28 @@ final class UpdateChecker {
 
     func checkForUpdates(silent: Bool = true) {
         Task {
-            guard let release = try? await fetchLatestRelease(),
-                  isNewer(release.version, than: currentVersion)
-            else { return }
+            guard let release = try? await fetchLatestRelease() else {
+                if !silent { showUpToDateAlert() }
+                return
+            }
+
+            guard isNewer(release.version, than: currentVersion) else {
+                if !silent { showUpToDateAlert() }
+                return
+            }
 
             updateAvailable = release
-
-            if !silent {
-                showUpdateAlert(release)
-            }
+            showUpdateAlert(release)
         }
+    }
+
+    private func showUpToDateAlert() {
+        let alert = NSAlert()
+        alert.messageText = "You're Up to Date"
+        alert.informativeText = "LSLS \(currentVersion) is the latest version."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func showUpdateAlert(_ release: Release) {
