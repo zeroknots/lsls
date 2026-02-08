@@ -3,6 +3,18 @@ import SwiftUI
 struct SyncListView: View {
     @Environment(SyncManager.self) private var syncManager
 
+    private var artists: [SyncItem] { syncManager.syncItems.filter { $0.itemType == .artist } }
+    private var albums: [SyncItem] { syncManager.syncItems.filter { $0.itemType == .album } }
+    private var tracks: [SyncItem] { syncManager.syncItems.filter { $0.itemType == .track } }
+
+    private var subtitleText: String {
+        var parts: [String] = []
+        if !artists.isEmpty { parts.append("\(artists.count) artist\(artists.count == 1 ? "" : "s")") }
+        if !albums.isEmpty { parts.append("\(albums.count) album\(albums.count == 1 ? "" : "s")") }
+        if !tracks.isEmpty { parts.append("\(tracks.count) song\(tracks.count == 1 ? "" : "s")") }
+        return parts.isEmpty ? "No items" : parts.joined(separator: ", ")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -10,7 +22,7 @@ struct SyncListView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Sync List")
                         .font(.title.bold())
-                    Text("\(syncManager.syncItems.count) items")
+                    Text(subtitleText)
                         .foregroundStyle(.secondary)
                 }
 
@@ -95,23 +107,36 @@ struct SyncListView: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(syncManager.syncItems) { item in
-                        SyncItemRow(item: item)
-                            .contextMenu {
-                                Button("Remove from Sync List", role: .destructive) {
-                                    syncManager.removeSyncItem(item)
-                                }
-                            }
-                    }
-                    .onDelete { offsets in
-                        for index in offsets {
-                            syncManager.removeSyncItem(syncManager.syncItems[index])
-                        }
-                    }
+                    syncSection("Artists", icon: "music.mic", items: artists)
+                    syncSection("Albums", icon: "square.stack", items: albums)
+                    syncSection("Songs", icon: "music.note", items: tracks)
                 }
                 .listStyle(.inset)
             }
         }
         .navigationTitle("Sync List")
+    }
+
+    @ViewBuilder
+    private func syncSection(_ title: String, icon: String, items: [SyncItem]) -> some View {
+        if !items.isEmpty {
+            Section {
+                ForEach(items) { item in
+                    SyncItemRow(item: item)
+                        .contextMenu {
+                            Button("Remove from Sync List", role: .destructive) {
+                                syncManager.removeSyncItem(item)
+                            }
+                        }
+                }
+                .onDelete { offsets in
+                    for index in offsets {
+                        syncManager.removeSyncItem(items[index])
+                    }
+                }
+            } header: {
+                Label(title, systemImage: icon)
+            }
+        }
     }
 }
