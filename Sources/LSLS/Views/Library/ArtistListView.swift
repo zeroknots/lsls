@@ -42,6 +42,7 @@ struct ArtistListView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
+    @Environment(NavigationRequest.self) private var navigationRequest
     @State private var artists: [Artist] = []
     @State private var selectedArtist: Artist?
     @State private var albums: [AlbumInfo] = []
@@ -61,12 +62,26 @@ struct ArtistListView: View {
         .task {
             loadArtists()
             loadPlaylists()
+            // Handle navigation request that was set before this view appeared
+            if let artistId = navigationRequest.selectArtistId {
+                if let artist = artists.first(where: { $0.id == artistId }) {
+                    selectedArtist = artist
+                }
+                navigationRequest.selectArtistId = nil
+            }
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadArtists()
         }
         .onChange(of: selectedArtist) {
             loadAlbums()
+        }
+        .onChange(of: navigationRequest.selectArtistId) { _, artistId in
+            guard let artistId else { return }
+            if let artist = artists.first(where: { $0.id == artistId }) {
+                selectedArtist = artist
+            }
+            navigationRequest.selectArtistId = nil
         }
         .sheet(item: $trackToEdit) { trackInfo in
             TrackEditView(trackInfo: trackInfo) {
@@ -145,21 +160,31 @@ struct ArtistListView: View {
                             .frame(height: 1)
 
                         // Scrollable albums + tracks
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(albums) { albumInfo in
-                                    albumSection(albumInfo)
+                        ScrollViewReader { scrollProxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    ForEach(albums) { albumInfo in
+                                        albumSection(albumInfo)
 
-                                    if albumInfo.id != albums.last?.id {
-                                        Rectangle()
-                                            .fill(colors.separator)
-                                            .frame(height: 1)
-                                            .padding(.horizontal, theme.spacing.contentPadding)
-                                            .padding(.vertical, 8)
+                                        if albumInfo.id != albums.last?.id {
+                                            Rectangle()
+                                                .fill(colors.separator)
+                                                .frame(height: 1)
+                                                .padding(.horizontal, theme.spacing.contentPadding)
+                                                .padding(.vertical, 8)
+                                        }
                                     }
                                 }
+                                .padding(.bottom, theme.spacing.contentPadding)
                             }
-                            .padding(.bottom, theme.spacing.contentPadding)
+                            .task(id: navigationRequest.scrollToTrackId) {
+                                guard let trackId = navigationRequest.scrollToTrackId else { return }
+                                try? await Task.sleep(for: .milliseconds(300))
+                                withAnimation {
+                                    scrollProxy.scrollTo("track-\(trackId)", anchor: .center)
+                                }
+                                navigationRequest.scrollToTrackId = nil
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -236,6 +261,7 @@ struct ArtistListView: View {
             // Track list for this album
             ForEach(tracks) { trackInfo in
                 albumTrackRow(for: trackInfo, allArtistTracks: allArtistTracks)
+                    .id("track-\(trackInfo.track.id ?? 0)")
             }
             .padding(.horizontal, 8)
         }
