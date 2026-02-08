@@ -543,6 +543,107 @@ enum LibraryQueries {
         _ = try SmartPlaylist.deleteOne(db, id: smartPlaylistId)
     }
 
+    // MARK: - Merge Operations
+
+    static func mergeAlbumsToArtist(
+        albumIds: [Int64],
+        artistName: String,
+        in db: Database
+    ) throws {
+        guard !albumIds.isEmpty else { return }
+        let artist = try findOrCreateArtist(name: artistName, in: db)
+        guard let artistId = artist.id else { return }
+
+        let placeholders = albumIds.map { _ in "?" }.joined(separator: ", ")
+        var args: [DatabaseValueConvertible] = [artistId]
+        args.append(contentsOf: albumIds)
+
+        try db.execute(
+            sql: "UPDATE track SET artistId = ? WHERE albumId IN (\(placeholders))",
+            arguments: StatementArguments(args)
+        )
+        try db.execute(
+            sql: "UPDATE album SET artistId = ? WHERE id IN (\(placeholders))",
+            arguments: StatementArguments(args)
+        )
+        try deleteOrphans(in: db)
+    }
+
+    static func mergeAlbumsIntoOne(
+        albumIds: [Int64],
+        targetAlbumTitle: String,
+        artistName: String,
+        in db: Database
+    ) throws {
+        guard !albumIds.isEmpty else { return }
+        let artist = try findOrCreateArtist(name: artistName, in: db)
+        guard let artistId = artist.id else { return }
+        let targetAlbum = try findOrCreateAlbum(title: targetAlbumTitle, artistId: artistId, in: db)
+        guard let targetAlbumId = targetAlbum.id else { return }
+
+        let placeholders = albumIds.map { _ in "?" }.joined(separator: ", ")
+        var args: [DatabaseValueConvertible] = [targetAlbumId, artistId]
+        args.append(contentsOf: albumIds)
+
+        try db.execute(
+            sql: "UPDATE track SET albumId = ?, artistId = ? WHERE albumId IN (\(placeholders))",
+            arguments: StatementArguments(args)
+        )
+
+        let albumIdsToDelete = albumIds.filter { $0 != targetAlbumId }
+        if !albumIdsToDelete.isEmpty {
+            let delPlaceholders = albumIdsToDelete.map { _ in "?" }.joined(separator: ", ")
+            try db.execute(
+                sql: "DELETE FROM album WHERE id IN (\(delPlaceholders))",
+                arguments: StatementArguments(albumIdsToDelete.map { $0 as DatabaseValueConvertible })
+            )
+        }
+        try deleteOrphans(in: db)
+    }
+
+    static func mergeTracksToAlbum(
+        trackIds: [Int64],
+        albumTitle: String,
+        artistName: String,
+        in db: Database
+    ) throws {
+        guard !trackIds.isEmpty else { return }
+        let artist = try findOrCreateArtist(name: artistName, in: db)
+        guard let artistId = artist.id else { return }
+        let album = try findOrCreateAlbum(title: albumTitle, artistId: artistId, in: db)
+        guard let albumId = album.id else { return }
+
+        let placeholders = trackIds.map { _ in "?" }.joined(separator: ", ")
+        var args: [DatabaseValueConvertible] = [albumId, artistId]
+        args.append(contentsOf: trackIds)
+
+        try db.execute(
+            sql: "UPDATE track SET albumId = ?, artistId = ? WHERE id IN (\(placeholders))",
+            arguments: StatementArguments(args)
+        )
+        try deleteOrphans(in: db)
+    }
+
+    static func mergeTracksToArtist(
+        trackIds: [Int64],
+        artistName: String,
+        in db: Database
+    ) throws {
+        guard !trackIds.isEmpty else { return }
+        let artist = try findOrCreateArtist(name: artistName, in: db)
+        guard let artistId = artist.id else { return }
+
+        let placeholders = trackIds.map { _ in "?" }.joined(separator: ", ")
+        var args: [DatabaseValueConvertible] = [artistId]
+        args.append(contentsOf: trackIds)
+
+        try db.execute(
+            sql: "UPDATE track SET artistId = ? WHERE id IN (\(placeholders))",
+            arguments: StatementArguments(args)
+        )
+        try deleteOrphans(in: db)
+    }
+
     // MARK: - Playlists
 
     static func addTrackToPlaylist(

@@ -10,8 +10,17 @@ struct SongListView: View {
     @State private var playlists: [Playlist] = []
     @State private var trackToEdit: TrackInfo? = nil
     @State private var trackToDelete: TrackInfo? = nil
+    @State private var selectedTrackIds: Set<Int64> = []
+    @State private var showMergeSheet = false
 
     private let db = DatabaseManager.shared
+
+    private var selectedTrackInfos: [TrackInfo] {
+        tracks.filter { trackInfo in
+            guard let id = trackInfo.track.id else { return false }
+            return selectedTrackIds.contains(id)
+        }
+    }
 
     var body: some View {
         List {
@@ -31,6 +40,13 @@ struct SongListView: View {
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
         .background(colors.background)
+        .onKeyPress(.escape) {
+            if !selectedTrackIds.isEmpty {
+                selectedTrackIds.removeAll()
+                return .handled
+            }
+            return .ignored
+        }
         .navigationTitle("Songs")
         .task {
             loadTracks()
@@ -41,6 +57,12 @@ struct SongListView: View {
         }
         .sheet(item: $trackToEdit) { trackInfo in
             TrackEditView(trackInfo: trackInfo) {
+                loadTracks()
+            }
+        }
+        .sheet(isPresented: $showMergeSheet) {
+            MergeTracksView(selectedTracks: selectedTrackInfos) {
+                selectedTrackIds.removeAll()
                 loadTracks()
             }
         }
@@ -62,13 +84,16 @@ struct SongListView: View {
 
     @ViewBuilder
     private func trackRow(for trackInfo: TrackInfo) -> some View {
+        let trackId = trackInfo.track.id ?? -1
         let isPlaying = playerState.currentTrack?.track.id == trackInfo.track.id
         let isInSyncList = trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
         let isFavorite = trackInfo.track.isFavorite
+        let isInSelection = selectedTrackIds.contains(trackId)
 
         TrackRow(
             trackInfo: trackInfo,
             isPlaying: isPlaying,
+            isSelected: isInSelection,
             isInSyncList: isInSyncList,
             isFavorite: isFavorite,
             playlists: playlists,
@@ -76,11 +101,35 @@ struct SongListView: View {
             onAddToQueue: { playerState.addToQueueEnd(trackInfo) },
             onSyncToggle: { handleSyncToggle(trackInfo) },
             onAddToPlaylist: { playlist in addTrackToPlaylist(trackInfo, playlist: playlist) },
-            onDelete: { trackToDelete = trackInfo },
-            onEdit: { trackToEdit = trackInfo },
+            onDelete: isInSelection && selectedTrackIds.count >= 2 ? { deleteSelectedTracks() } : { trackToDelete = trackInfo },
+            onEdit: isInSelection && selectedTrackIds.count >= 2 ? nil : { trackToEdit = trackInfo },
             onFavoriteToggle: { toggleFavorite(trackInfo) },
-            onAnalyzeBPM: { Task { await LibraryManager.analyzeBPM(for: trackInfo.track) } }
+            onAnalyzeBPM: { Task { await LibraryManager.analyzeBPM(for: trackInfo.track) } },
+            onSelect: { withCommand in
+                if withCommand {
+                    if selectedTrackIds.contains(trackId) {
+                        selectedTrackIds.remove(trackId)
+                    } else {
+                        selectedTrackIds.insert(trackId)
+                    }
+                } else {
+                    selectedTrackIds.removeAll()
+                }
+            }
         )
+        .contextMenu {
+            if isInSelection && selectedTrackIds.count >= 2 {
+                Button("Merge...") {
+                    showMergeSheet = true
+                }
+
+                Divider()
+
+                Button("Delete \(selectedTrackIds.count) Tracks", role: .destructive) {
+                    deleteSelectedTracks()
+                }
+            }
+        }
     }
 
     private func handleSyncToggle(_ trackInfo: TrackInfo) {
@@ -145,6 +194,23 @@ struct SongListView: View {
             loadTracks()
         } catch {
             print("Failed to delete track: \(error)")
+        }
+    }
+
+    private func deleteSelectedTracks() {
+        do {
+            try db.dbPool.write { dbConn in
+                for trackId in selectedTrackIds {
+                    if playerState.currentTrack?.track.id == trackId {
+                        playerState.playNext()
+                    }
+                    try LibraryQueries.deleteTrack(trackId, in: dbConn)
+                }
+            }
+            selectedTrackIds.removeAll()
+            loadTracks()
+        } catch {
+            print("Failed to delete tracks: \(error)")
         }
     }
 }
