@@ -8,30 +8,22 @@ import Testing
 @Suite("Artwork Pipeline")
 struct ArtworkPipelineTests {
 
-    private static let testFile = URL(
-        fileURLWithPath:
-            "/Volumes/media/music/TOOL DISCOGRAPHY [24 96] REMASTERED - QOBUZ - MMXX/TOOL [24 96] MMXX/[1992] OPIATE EP/01 - Sweat.flac"
-    )
-
-    private static var hasTestFile: Bool {
-        FileManager.default.fileExists(atPath: testFile.path)
-    }
-
-    private static var hasFFmpeg: Bool {
-        FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg")
-    }
-
     // MARK: - extractArtwork
 
     @Test("extractArtwork returns valid JPEG data")
-    func extractArtworkData() async {
-        guard Self.hasTestFile else { return }
+    func extractArtworkData() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        let data = await MetadataReader.extractArtwork(from: Self.testFile)
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: true)
+
+        let data = await MetadataReader.extractArtwork(from: flac)
         #expect(data != nil)
         guard let data else { return }
 
-        #expect(data.count > 1000, "Artwork should be at least 1KB, got \(data.count)")
+        #expect(data.count > 100, "Artwork should be at least 100 bytes, got \(data.count)")
 
         // Verify JPEG header (FFD8)
         #expect(data[0] == 0xFF)
@@ -39,39 +31,31 @@ struct ArtworkPipelineTests {
     }
 
     @Test("extractArtwork completes within timeout")
-    func extractArtworkTiming() async {
-        guard Self.hasTestFile else { return }
+    func extractArtworkTiming() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
+
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: true)
 
         let start = Date()
-        _ = await MetadataReader.extractArtwork(from: Self.testFile)
+        _ = await MetadataReader.extractArtwork(from: flac)
         let elapsed = Date().timeIntervalSince(start)
 
         #expect(elapsed < 15, "Extraction took \(String(format: "%.1f", elapsed))s — should be under 15s")
     }
 
     @Test("extractArtwork returns nil for file without artwork")
-    func extractArtworkNoArt() async {
-        guard Self.hasFFmpeg else { return }
+    func extractArtworkNoArt() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        // Create a tiny WAV file with no artwork
-        let tmpWav = FileManager.default.temporaryDirectory
-            .appendingPathComponent("lsls-test-noart-\(UUID()).wav")
-        defer { try? FileManager.default.removeItem(at: tmpWav) }
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
-        process.arguments = [
-            "-v", "quiet", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1",
-            "-y", tmpWav.path,
-        ]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try? process.run()
-        process.waitUntilExit()
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: false)
 
-        guard process.terminationStatus == 0 else { return }
-
-        let data = await MetadataReader.extractArtwork(from: tmpWav)
+        let data = await MetadataReader.extractArtwork(from: flac)
         #expect(data == nil)
     }
 
@@ -86,10 +70,15 @@ struct ArtworkPipelineTests {
 
     @Test("extracted artwork can be saved via ArtworkCache")
     @MainActor
-    func extractAndSave() async {
-        guard Self.hasTestFile else { return }
+    func extractAndSave() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        let data = await MetadataReader.extractArtwork(from: Self.testFile)
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: true)
+
+        let data = await MetadataReader.extractArtwork(from: flac)
         #expect(data != nil)
         guard let data else { return }
 
@@ -107,7 +96,7 @@ struct ArtworkPipelineTests {
         // Verify saved file is valid
         #expect(FileManager.default.fileExists(atPath: savedPath))
         let savedData = try? Data(contentsOf: URL(fileURLWithPath: savedPath))
-        #expect((savedData?.count ?? 0) > 1000)
+        #expect((savedData?.count ?? 0) > 100)
 
         // Verify it's in the memory cache
         let album = Album(id: albumId, title: "Pipeline Test", artworkPath: savedPath)
@@ -117,10 +106,15 @@ struct ArtworkPipelineTests {
 
     @Test("artwork round-trip: save then load from disk")
     @MainActor
-    func saveAndReload() async {
-        guard Self.hasTestFile else { return }
+    func saveAndReload() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        let data = await MetadataReader.extractArtwork(from: Self.testFile)
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: true)
+
+        let data = await MetadataReader.extractArtwork(from: flac)
         guard let data, let image = NSImage(data: data) else { return }
 
         let albumId: Int64 = 99989

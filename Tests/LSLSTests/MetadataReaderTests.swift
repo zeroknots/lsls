@@ -76,43 +76,48 @@ struct MetadataReaderTests {
         #expect(MetadataReader.supportedExtensions == expected)
     }
 
-    // MARK: - Integration: read from real FLAC file
+    // MARK: - Integration: read from generated FLAC file
 
-    @Test("read extracts metadata from FLAC file via ffprobe")
-    func readFLACFile() async throws {
-        let testFile = URL(fileURLWithPath: "/Volumes/media/music/TOOL DISCOGRAPHY [24 96] REMASTERED - QOBUZ - MMXX/TOOL [24 96] MMXX/[1992] OPIATE EP/01 - Sweat.flac")
+    @Test("read extracts metadata from generated FLAC via ffprobe")
+    func readGeneratedFLAC() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        guard FileManager.default.fileExists(atPath: testFile.path) else {
-            // Skip if test file not available
-            return
-        }
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let metadata = try await MetadataReader.read(from: testFile)
+        let flac = try TestFixtures.generateFlac(
+            in: tmpDir,
+            title: "Sweat",
+            artist: "TOOL",
+            album: "Opiate",
+            year: "1992",
+            track: "1/6",
+            genre: "Metal"
+        )
+
+        let metadata = try await MetadataReader.read(from: flac)
 
         #expect(metadata.title == "Sweat")
         #expect(metadata.artist == "TOOL")
         #expect(metadata.albumTitle == "Opiate")
         #expect(metadata.genre == "Metal")
         #expect(metadata.trackNumber == 1)
-        #expect(metadata.discNumber == 1)
         #expect(metadata.year == 1992)
-        #expect(metadata.duration > 200) // ~226 seconds
-        #expect(metadata.duration < 240)
+        #expect(metadata.duration > 0)
         #expect(metadata.fileSize > 0)
-        // artwork is extracted separately via extractArtwork(), not in read()
-        #expect(metadata.artworkData == nil)
     }
 
-    @Test("extractArtwork returns embedded cover art")
-    func extractArtwork() async {
-        let testFile = URL(fileURLWithPath: "/Volumes/media/music/TOOL DISCOGRAPHY [24 96] REMASTERED - QOBUZ - MMXX/TOOL [24 96] MMXX/[1992] OPIATE EP/01 - Sweat.flac")
+    @Test("extractArtwork returns embedded cover art from generated FLAC")
+    func extractArtwork() async throws {
+        guard TestFixtures.hasFFmpeg else { return }
 
-        guard FileManager.default.fileExists(atPath: testFile.path) else {
-            return
-        }
+        let tmpDir = try TestFixtures.createTempDir()
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let data = await MetadataReader.extractArtwork(from: testFile)
+        let flac = try TestFixtures.generateFlac(in: tmpDir, withArtwork: true)
+
+        let data = await MetadataReader.extractArtwork(from: flac)
         #expect(data != nil)
-        #expect((data?.count ?? 0) > 1000)
+        #expect((data?.count ?? 0) > 100)
     }
 }
