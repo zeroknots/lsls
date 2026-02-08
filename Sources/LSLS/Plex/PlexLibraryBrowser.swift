@@ -81,7 +81,8 @@ final class PlexLibraryBrowser {
             dateAdded: Date(),
             playCount: 0,
             lastPlayedAt: nil,
-            isFavorite: false
+            isFavorite: false,
+            bpm: nil
         )
 
         let albumModel: Album? = {

@@ -118,6 +118,12 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("v5") { db in
+            try db.alter(table: "track") { t in
+                t.add(column: "bpm", .double)
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 }

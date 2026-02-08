@@ -16,6 +16,7 @@ struct Track: Codable, Identifiable, Equatable, Hashable {
     var playCount: Int
     var lastPlayedAt: Date?
     var isFavorite: Bool
+    var bpm: Double?
 }
 
 extension Track: FetchableRecord, MutablePersistableRecord {

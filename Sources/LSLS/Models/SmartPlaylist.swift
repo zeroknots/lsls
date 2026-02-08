@@ -30,6 +30,7 @@ enum SmartPlaylistField: String, Codable, CaseIterable, Hashable {
     case genre
     case dateAdded
     case lastPlayedAt
+    case bpm
 
     var displayName: String {
         switch self {
@@ -39,6 +40,7 @@ enum SmartPlaylistField: String, Codable, CaseIterable, Hashable {
         case .genre: "Genre"
         case .dateAdded: "Date Added"
         case .lastPlayedAt: "Last Played"
+        case .bpm: "BPM"
         }
     }
 
@@ -52,6 +54,8 @@ enum SmartPlaylistField: String, Codable, CaseIterable, Hashable {
             return [.equals, .contains]
         case .dateAdded, .lastPlayedAt:
             return [.greaterThan, .lessThan]
+        case .bpm:
+            return [.greaterThan, .lessThan, .equals]
         }
     }
 }
