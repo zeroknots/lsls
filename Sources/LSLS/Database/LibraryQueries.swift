@@ -384,7 +384,7 @@ enum LibraryQueries {
         }
 
         let whereClause = conditions.joined(separator: " AND ")
-        let artistJoin = needsArtistJoin ? "" : "LEFT JOIN artist ON artist.id = track.artistId"
+        let _ = needsArtistJoin ? "" : "LEFT JOIN artist ON artist.id = track.artistId"
 
         let sql = """
             SELECT track.*, album.*, artist.*

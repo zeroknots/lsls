@@ -20,13 +20,23 @@ echo "Creating DMG..."
 cp -R "${APP_BUNDLE}" "${STAGING_DIR}/"
 ln -s /Applications "${STAGING_DIR}/Applications"
 
-# Create DMG with hdiutil
-hdiutil create \
-    -volname "${APP_NAME}" \
-    -srcfolder "${STAGING_DIR}" \
-    -ov \
-    -format UDZO \
-    "${DMG_FINAL}"
+# Create DMG with hdiutil (retry to handle "Resource busy" on CI runners)
+for i in 1 2 3; do
+    if hdiutil create \
+        -volname "${APP_NAME}" \
+        -srcfolder "${STAGING_DIR}" \
+        -ov \
+        -format UDZO \
+        "${DMG_FINAL}"; then
+        break
+    fi
+    echo "hdiutil create failed (attempt $i/3), retrying in 5s..."
+    sleep 5
+    if [ "$i" -eq 3 ]; then
+        echo "Error: hdiutil create failed after 3 attempts"
+        exit 1
+    fi
+done
 
 # Clean up
 rm -rf "${STAGING_DIR}"

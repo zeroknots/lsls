@@ -15,7 +15,7 @@ struct FullPlayerView: View {
             colors.background
                 .ignoresSafeArea()
 
-            if let album = playerState.currentTrack?.album {
+            if playerState.currentTrack?.album != nil {
                 Circle()
                     .fill(colors.accent.opacity(0.12))
                     .blur(radius: 120)
