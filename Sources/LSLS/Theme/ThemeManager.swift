@@ -9,6 +9,7 @@ final class ThemeManager {
     }
     var resolvedColors: ResolvedThemeColors
 
+    private nonisolated(unsafe) var watchTask: Task<Void, Never>?
     private nonisolated(unsafe) var fileWatcher: (any DispatchSourceFileSystemObject)?
     private let configDir: URL
     private let configFile: URL
@@ -26,6 +27,7 @@ final class ThemeManager {
     }
 
     deinit {
+        watchTask?.cancel()
         fileWatcher?.cancel()
     }
 
@@ -90,8 +92,28 @@ final class ThemeManager {
         let dir = configDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
+        guard let (stream, source) = Self.makeFileWatcher(directory: dir) else { return }
+        self.fileWatcher = source
+
+        watchTask = Task {
+            for await _ in stream {
+                try? await Task.sleep(for: .milliseconds(200))
+                reload()
+            }
+        }
+    }
+
+    /// Creates a DispatchSource file watcher and returns an AsyncStream of
+    /// change events. Must be `nonisolated` so the GCD event handler closures
+    /// are NOT implicitly marked @MainActor — otherwise the runtime calls
+    /// swift_task_isCurrentExecutorImpl on the utility queue and crashes.
+    private nonisolated static func makeFileWatcher(
+        directory dir: URL
+    ) -> (AsyncStream<Void>, any DispatchSourceFileSystemObject)? {
         let fd = open(dir.path, O_EVTONLY)
-        guard fd >= 0 else { return }
+        guard fd >= 0 else { return nil }
+
+        let (stream, continuation) = AsyncStream.makeStream(of: Void.self)
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
@@ -99,17 +121,16 @@ final class ThemeManager {
             queue: .global(qos: .utility)
         )
 
-        source.setEventHandler { [weak self] in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.reload()
-            }
+        source.setEventHandler {
+            continuation.yield()
         }
 
         source.setCancelHandler {
             close(fd)
+            continuation.finish()
         }
 
         source.resume()
-        self.fileWatcher = source
+        return (stream, source)
     }
 }
