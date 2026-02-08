@@ -40,6 +40,7 @@ struct LSLSApp: App {
     @State private var syncManager = SyncManager()
     @State private var plexState = PlexConnectionState()
     @State private var updateChecker = UpdateChecker()
+    @State private var navigationRequest = NavigationRequest()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -54,6 +55,7 @@ struct LSLSApp: App {
                 .environment(plexState)
                 .environment(themeManager)
                 .environment(syncManager)
+                .environment(navigationRequest)
                 .frame(minWidth: 900, minHeight: 600)
                 .task { updateChecker.checkForUpdates() }
         }
@@ -105,6 +107,18 @@ struct LSLSApp: App {
                     playerState.cycleRepeat()
                 }
                 .keyboardShortcut("r", modifiers: .command)
+            }
+
+            CommandMenu("Navigation") {
+                Button("Quick Search") {
+                    navigationRequest.isCommandPaletteVisible.toggle()
+                }
+                .keyboardShortcut("k", modifiers: .command)
+
+                Button("Open Playlist") {
+                    navigationRequest.isPlaylistPaletteVisible.toggle()
+                }
+                .keyboardShortcut("p", modifiers: .command)
             }
 
             CommandMenu("Theme") {

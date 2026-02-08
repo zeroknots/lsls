@@ -25,6 +25,20 @@ enum LibraryDragItem: Codable, Transferable, Hashable {
     }
 }
 
+enum CommandPaletteResultKind: Equatable, Hashable {
+    case track(TrackInfo)
+    case album(AlbumInfo)
+    case artist(Artist)
+}
+
+struct CommandPaletteResult: Identifiable, Equatable, Hashable {
+    let id: String
+    let kind: CommandPaletteResultKind
+    let title: String
+    let subtitle: String
+    let iconName: String
+}
+
 enum LibraryQueries {
     static func allAlbums(in db: Database) throws -> [AlbumInfo] {
         let request = Album
@@ -115,6 +129,118 @@ enum LibraryQueries {
             .fetchAll(db)
 
         return (tracks, albums, artists)
+    }
+
+    static func commandPaletteSearch(_ query: String, in db: Database) throws -> [CommandPaletteResult] {
+        guard !query.isEmpty else { return [] }
+        let tokens = query.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return [] }
+
+        // Step 1: Use raw SQL to find matching track IDs with cross-field token matching
+        let tokenConditions = tokens.map { _ in
+            "(track.title LIKE ? OR artist.name LIKE ? OR album.title LIKE ?)"
+        }.joined(separator: " AND ")
+        var arguments: [DatabaseValueConvertible] = []
+        for token in tokens {
+            let pattern = "%\(token)%"
+            arguments.append(contentsOf: [pattern, pattern, pattern])
+        }
+
+        let scoreExpr = tokens.map { _ in
+            "(CASE WHEN track.title LIKE ? THEN 1 ELSE 0 END)"
+        }.joined(separator: " + ")
+        for token in tokens {
+            arguments.append("%\(token)%")
+        }
+
+        arguments.append(20)
+
+        let trackIds = try Int64.fetchAll(db, sql: """
+            SELECT track.id
+            FROM track
+            LEFT JOIN album ON album.id = track.albumId
+            LEFT JOIN artist ON artist.id = track.artistId
+            WHERE \(tokenConditions)
+            ORDER BY \(scoreExpr) DESC, track.title ASC
+            LIMIT ?
+            """, arguments: StatementArguments(arguments))
+
+        guard !trackIds.isEmpty else { return [] }
+
+        // Step 2: Fetch full TrackInfo via GRDB query interface (proper column scoping)
+        let allTracks = try Track
+            .filter(trackIds.contains(Track.Columns.id))
+            .including(optional: Track.album)
+            .including(optional: Track.artist)
+            .asRequest(of: TrackInfo.self)
+            .fetchAll(db)
+
+        // Preserve the ranked order from the SQL query
+        let trackById = Dictionary(uniqueKeysWithValues: allTracks.compactMap { t in
+            t.track.id.map { ($0, t) }
+        })
+        let tracks = trackIds.compactMap { trackById[$0] }
+
+        var results: [CommandPaletteResult] = []
+        var seenArtistIds = Set<Int64>()
+        var seenAlbumIds = Set<Int64>()
+
+        // Extract unique artists and albums from matched tracks
+        for trackInfo in tracks {
+            if let artist = trackInfo.artist, let artistId = artist.id, !seenArtistIds.contains(artistId) {
+                let artistMatches = tokens.contains { token in
+                    artist.name.localizedCaseInsensitiveContains(token)
+                }
+                if artistMatches && seenArtistIds.count < 3 {
+                    seenArtistIds.insert(artistId)
+                    results.append(CommandPaletteResult(
+                        id: "artist-\(artistId)",
+                        kind: .artist(artist),
+                        title: artist.name,
+                        subtitle: "Artist",
+                        iconName: "music.mic"
+                    ))
+                }
+            }
+
+            if let album = trackInfo.album, let albumId = album.id, !seenAlbumIds.contains(albumId) {
+                let albumMatches = tokens.contains { token in
+                    album.title.localizedCaseInsensitiveContains(token)
+                }
+                if albumMatches && seenAlbumIds.count < 3 {
+                    seenAlbumIds.insert(albumId)
+                    results.append(CommandPaletteResult(
+                        id: "album-\(albumId)",
+                        kind: .album(AlbumInfo(album: album, artist: trackInfo.artist)),
+                        title: album.title,
+                        subtitle: trackInfo.artist?.name ?? "Album",
+                        iconName: "opticaldisc"
+                    ))
+                }
+            }
+        }
+
+        // Add track results
+        for trackInfo in tracks {
+            let artistName = trackInfo.artist?.name
+            let albumTitle = trackInfo.album?.title
+            let subtitle: String
+            switch (artistName, albumTitle) {
+            case let (a?, b?): subtitle = "\(a) — \(b)"
+            case let (a?, nil): subtitle = a
+            case let (nil, b?): subtitle = b
+            case (nil, nil): subtitle = ""
+            }
+            results.append(CommandPaletteResult(
+                id: "track-\(trackInfo.track.id ?? 0)",
+                kind: .track(trackInfo),
+                title: trackInfo.track.title,
+                subtitle: subtitle,
+                iconName: "music.note"
+            ))
+        }
+
+        return results
     }
 
     static func playlistTracks(_ playlistId: Int64, in db: Database) throws -> [TrackInfo] {
