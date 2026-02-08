@@ -92,7 +92,8 @@ struct ImportIntegrationTests {
             }
         }
         audioFiles.sort { $0.path < $1.path }
-        print("Importing \(audioFiles.count) files via LibraryManager.importFile...")
+        let fileCount = audioFiles.count
+        print("Importing \(fileCount) files via LibraryManager.importFile...")
 
         // Use the REAL production LibraryManager + DatabaseManager.shared
         // WARNING: This test uses the production database. Do NOT delete data.
@@ -113,7 +114,7 @@ struct ImportIntegrationTests {
 
             print("Results: \(trackCount) tracks, \(albumCount) albums, \(artistCount) artists")
 
-            #expect(trackCount >= audioFiles.count)
+            #expect(trackCount >= fileCount)
             #expect(albumCount >= 6)
             #expect(artistCount >= 1)
 

@@ -41,8 +41,8 @@ struct AlbumArtView: View {
             y: 2
         )
         .drawingGroup()
-        .task(id: album?.id) {
-            guard let album, artworkURL == nil, loadedImage == nil else { return }
+        .task(id: album?.artworkPath) {
+            guard let album, artworkURL == nil else { return }
             loadedImage = await ArtworkCache.shared.loadArtwork(for: album)
         }
     }
