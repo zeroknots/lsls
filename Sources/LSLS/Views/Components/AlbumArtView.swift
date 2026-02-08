@@ -7,8 +7,13 @@ struct AlbumArtView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
+    @State private var loadedImage: NSImage?
 
     var body: some View {
+        // Check cache synchronously to avoid placeholder flash on scroll-back
+        let cachedImage = artworkURL == nil ? album.flatMap({ ArtworkCache.shared.cachedArtwork(for: $0) }) : nil
+        let displayImage = loadedImage ?? cachedImage
+
         Group {
             if let artworkURL {
                 AsyncImage(url: artworkURL) { image in
@@ -16,8 +21,8 @@ struct AlbumArtView: View {
                 } placeholder: {
                     placeholder
                 }
-            } else if let album, let image = ArtworkCache.shared.artwork(for: album) {
-                Image(nsImage: image)
+            } else if let displayImage {
+                Image(nsImage: displayImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
@@ -35,6 +40,11 @@ struct AlbumArtView: View {
             radius: theme.effects.albumArtShadowRadius,
             y: 2
         )
+        .drawingGroup()
+        .task(id: album?.id) {
+            guard let album, artworkURL == nil, loadedImage == nil else { return }
+            loadedImage = await ArtworkCache.shared.loadArtwork(for: album)
+        }
     }
 
     private var placeholder: some View {

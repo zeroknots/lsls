@@ -163,7 +163,7 @@ struct SmartPlaylistEditorView: View {
         guard let playlistId = smartPlaylist?.id else { return }
 
         do {
-            let existingRules = try db.dbQueue.read { db in
+            let existingRules = try db.dbPool.read { db in
                 try LibraryQueries.rulesForSmartPlaylist(playlistId, in: db)
             }
 
@@ -199,7 +199,7 @@ struct SmartPlaylistEditorView: View {
         }
 
         do {
-            let tracks = try db.dbQueue.read { db in
+            let tracks = try db.dbPool.read { db in
                 try LibraryQueries.smartPlaylistTracks(tempRules, in: db)
             }
             matchCount = tracks.count
@@ -214,7 +214,7 @@ struct SmartPlaylistEditorView: View {
         guard !trimmedName.isEmpty, !rules.isEmpty else { return }
 
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 var playlist: SmartPlaylist
 
                 if let existing = smartPlaylist, let existingId = existing.id {

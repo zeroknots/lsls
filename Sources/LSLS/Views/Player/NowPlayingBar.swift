@@ -151,14 +151,14 @@ struct NowPlayingBar: View {
             isFavorite = false
             return
         }
-        isFavorite = (try? db.dbQueue.read { db in
+        isFavorite = (try? db.dbPool.read { db in
             try LibraryQueries.isFavorite(trackId: trackId, in: db)
         }) ?? false
     }
 
     private func toggleFavorite() {
         guard let trackId = playerState.currentTrack?.track.id else { return }
-        try? db.dbQueue.write { dbConn in
+        try? db.dbPool.write { dbConn in
             try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
         }
         isFavorite.toggle()

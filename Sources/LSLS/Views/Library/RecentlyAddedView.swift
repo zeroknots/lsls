@@ -92,7 +92,7 @@ struct RecentlyAddedView: View {
 
     private func deleteAlbum(_ albumId: Int64) {
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteAlbum(albumId, in: dbConn)
             }
             loadRecent()
@@ -103,7 +103,7 @@ struct RecentlyAddedView: View {
 
     private func loadRecent() {
         do {
-            albums = try db.dbQueue.read { db in
+            albums = try db.dbPool.read { db in
                 try LibraryQueries.recentlyAdded(in: db)
             }
         } catch {

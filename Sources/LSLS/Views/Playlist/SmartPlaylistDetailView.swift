@@ -128,7 +128,7 @@ struct SmartPlaylistDetailView: View {
     private func loadRulesAndTracks() {
         guard let smartPlaylistId = smartPlaylist.id else { return }
         do {
-            try db.dbQueue.read { db in
+            try db.dbPool.read { db in
                 rules = try LibraryQueries.rulesForSmartPlaylist(smartPlaylistId, in: db)
                 tracks = try LibraryQueries.smartPlaylistTracks(rules, in: db)
             }
@@ -140,7 +140,7 @@ struct SmartPlaylistDetailView: View {
 
     private func loadPlaylists() {
         do {
-            playlists = try db.dbQueue.read { db in
+            playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
         } catch {
@@ -150,7 +150,7 @@ struct SmartPlaylistDetailView: View {
 
     private func loadFavorites() {
         do {
-            favorites = try db.dbQueue.read { db in
+            favorites = try db.dbPool.read { db in
                 var favoriteSet = Set<Int64>()
                 for trackInfo in tracks {
                     if let trackId = trackInfo.track.id {
@@ -169,7 +169,7 @@ struct SmartPlaylistDetailView: View {
     private func toggleFavorite(_ trackInfo: TrackInfo) {
         guard let trackId = trackInfo.track.id else { return }
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 try LibraryQueries.toggleFavorite(trackId: trackId, in: db)
             }
             if favorites.contains(trackId) {
@@ -185,7 +185,7 @@ struct SmartPlaylistDetailView: View {
     private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
         guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: db)
             }
         } catch {

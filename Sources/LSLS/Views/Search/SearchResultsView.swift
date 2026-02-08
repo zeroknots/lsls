@@ -171,7 +171,7 @@ struct SearchResultsView: View {
             return
         }
         do {
-            let results = try db.dbQueue.read { db in
+            let results = try db.dbPool.read { db in
                 try LibraryQueries.search(query, in: db)
             }
             tracks = results.tracks
@@ -184,7 +184,7 @@ struct SearchResultsView: View {
 
     private func loadPlaylists() {
         do {
-            playlists = try db.dbQueue.read { db in
+            playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
         } catch {
@@ -195,7 +195,7 @@ struct SearchResultsView: View {
     private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
         guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
             }
         } catch {
@@ -209,7 +209,7 @@ struct SearchResultsView: View {
             playerState.playNext()
         }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteTrack(trackId, in: dbConn)
             }
             performSearch(searchText)

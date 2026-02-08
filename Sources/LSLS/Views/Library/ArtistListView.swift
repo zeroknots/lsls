@@ -1,6 +1,41 @@
 import SwiftUI
 import GRDB
 
+private struct ArtistAvatarView: View {
+    let album: Album?
+    let size: CGFloat
+
+    @Environment(\.themeColors) private var colors
+    @State private var image: NSImage?
+
+    var body: some View {
+        let displayImage = image ?? album.flatMap({ ArtworkCache.shared.cachedArtwork(for: $0) })
+
+        Group {
+            if let displayImage {
+                Image(nsImage: displayImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(colors.accentSubtle)
+                        .frame(width: size, height: size)
+                    Image(systemName: "music.mic")
+                        .font(.system(size: size * 0.38))
+                        .foregroundStyle(colors.textTertiary)
+                }
+            }
+        }
+        .task(id: album?.id) {
+            guard let album, image == nil else { return }
+            image = await ArtworkCache.shared.loadArtwork(for: album)
+        }
+    }
+}
+
 struct ArtistListView: View {
     @Environment(PlayerState.self) private var playerState
     @Environment(LibraryManager.self) private var libraryManager
@@ -283,31 +318,14 @@ struct ArtistListView: View {
         }
     }
 
-    @ViewBuilder
     private func artistAvatar(for artist: Artist, size: CGFloat) -> some View {
-        if let artistId = artist.id,
-           let album = artistFirstAlbum[artistId],
-           let image = ArtworkCache.shared.artwork(for: album) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-        } else {
-            ZStack {
-                Circle()
-                    .fill(colors.accentSubtle)
-                    .frame(width: size, height: size)
-                Image(systemName: "music.mic")
-                    .font(.system(size: size * 0.38))
-                    .foregroundStyle(colors.textTertiary)
-            }
-        }
+        let album = artist.id.flatMap { artistFirstAlbum[$0] }
+        return ArtistAvatarView(album: album, size: size)
     }
 
     private func loadArtists() {
         do {
-            artists = try db.dbQueue.read { db in
+            artists = try db.dbPool.read { db in
                 try LibraryQueries.allArtists(in: db)
             }
             loadArtistArtwork()
@@ -321,7 +339,7 @@ struct ArtistListView: View {
 
     private func loadArtistArtwork() {
         do {
-            let allAlbums = try db.dbQueue.read { db in
+            let allAlbums = try db.dbPool.read { db in
                 try LibraryQueries.allAlbums(in: db)
             }
             var lookup: [Int64: Album] = [:]
@@ -343,14 +361,14 @@ struct ArtistListView: View {
             return
         }
         do {
-            albums = try db.dbQueue.read { db in
+            albums = try db.dbPool.read { db in
                 try LibraryQueries.albumsForArtist(artistId, in: db)
             }
             // Load tracks for each album
             var tracks: [Int64: [TrackInfo]] = [:]
             for albumInfo in albums {
                 guard let albumId = albumInfo.album.id else { continue }
-                tracks[albumId] = try db.dbQueue.read { db in
+                tracks[albumId] = try db.dbPool.read { db in
                     try LibraryQueries.tracksForAlbum(albumId, in: db)
                 }
             }
@@ -362,7 +380,7 @@ struct ArtistListView: View {
 
     private func loadPlaylists() {
         do {
-            playlists = try db.dbQueue.read { db in
+            playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
         } catch {
@@ -373,7 +391,7 @@ struct ArtistListView: View {
     private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
         guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
             }
         } catch {
@@ -383,7 +401,7 @@ struct ArtistListView: View {
 
     private func toggleFavorite(_ trackInfo: TrackInfo) {
         guard let trackId = trackInfo.track.id else { return }
-        try? db.dbQueue.write { dbConn in
+        try? db.dbPool.write { dbConn in
             try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
         }
         loadAlbums()
@@ -395,7 +413,7 @@ struct ArtistListView: View {
             playerState.playNext()
         }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteTrack(trackId, in: dbConn)
             }
             loadAlbums()
@@ -406,7 +424,7 @@ struct ArtistListView: View {
 
     private func deleteAlbum(_ albumId: Int64) {
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteAlbum(albumId, in: dbConn)
             }
             loadAlbums()

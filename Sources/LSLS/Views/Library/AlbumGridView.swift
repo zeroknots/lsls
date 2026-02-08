@@ -87,7 +87,7 @@ struct AlbumGridView: View {
 
     private func deleteAlbum(_ albumId: Int64) {
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteAlbum(albumId, in: dbConn)
             }
             loadAlbums()
@@ -98,7 +98,7 @@ struct AlbumGridView: View {
 
     private func loadAlbums() {
         do {
-            albums = try db.dbQueue.read { db in
+            albums = try db.dbPool.read { db in
                 try LibraryQueries.allAlbums(in: db)
             }
         } catch {

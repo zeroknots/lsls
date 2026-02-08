@@ -5,7 +5,7 @@ import GRDB
 final class DatabaseManager: Sendable {
     static let shared = DatabaseManager()
 
-    let dbQueue: DatabaseQueue
+    let dbPool: DatabasePool
 
     private init() {
         do {
@@ -13,7 +13,7 @@ final class DatabaseManager: Sendable {
             let dbDir = appSupport.appendingPathComponent("LSLS", isDirectory: true)
             try FileManager.default.createDirectory(at: dbDir, withIntermediateDirectories: true)
             let dbPath = dbDir.appendingPathComponent("library.sqlite").path
-            dbQueue = try DatabaseQueue(path: dbPath)
+            dbPool = try DatabasePool(path: dbPath)
             try migrate()
         } catch {
             fatalError("Database initialization failed: \(error)")
@@ -118,6 +118,6 @@ final class DatabaseManager: Sendable {
             }
         }
 
-        try migrator.migrate(dbQueue)
+        try migrator.migrate(dbPool)
     }
 }

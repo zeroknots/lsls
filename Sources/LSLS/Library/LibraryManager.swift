@@ -28,7 +28,7 @@ final class LibraryManager {
         }
 
         // Filter out already-imported files before doing expensive ffprobe work
-        let existingPaths: Set<String> = (try? await db.dbQueue.read { dbConn in
+        let existingPaths: Set<String> = (try? await db.dbPool.read { dbConn in
             let paths = try String.fetchAll(dbConn, Track.select(Track.Columns.filePath))
             return Set(paths)
         }) ?? []
@@ -45,7 +45,7 @@ final class LibraryManager {
         var completed = 0
 
         // Process in batches for concurrency without data race issues
-        let batchSize = 4
+        let batchSize = 8
         for batchStart in stride(from: 0, to: newFiles.count, by: batchSize) {
             let batchEnd = min(batchStart + batchSize, newFiles.count)
             let batch = Array(newFiles[batchStart..<batchEnd])
@@ -89,7 +89,7 @@ final class LibraryManager {
         return audioFiles.sorted { $0.path < $1.path }
     }
 
-    private static let coverArtFilenames: Set<String> = [
+    nonisolated private static let coverArtFilenames: Set<String> = [
         "cover.jpg", "cover.jpeg", "cover.png",
         "folder.jpg", "folder.jpeg", "folder.png",
         "front.jpg", "front.jpeg", "front.png",
@@ -97,16 +97,16 @@ final class LibraryManager {
         "art.jpg", "art.jpeg", "art.png",
     ]
 
-    private func findFolderArtwork(for fileURL: URL) -> NSImage? {
+    nonisolated private static func findFolderArtworkData(for fileURL: URL) -> Data? {
         let folder = fileURL.deletingLastPathComponent()
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(atPath: folder.path) else { return nil }
 
         for filename in contents {
-            if Self.coverArtFilenames.contains(filename.lowercased()) {
+            if coverArtFilenames.contains(filename.lowercased()) {
                 let artPath = folder.appendingPathComponent(filename).path
-                if let image = NSImage(contentsOfFile: artPath) {
-                    return image
+                if let data = try? Data(contentsOf: URL(fileURLWithPath: artPath)) {
+                    return data
                 }
             }
         }
@@ -114,81 +114,101 @@ final class LibraryManager {
     }
 
     nonisolated func importFile(_ fileURL: URL) async {
+        let db = DatabaseManager.shared
+
         do {
             let metadata = try await MetadataReader.read(from: fileURL)
 
-            // Check if album needs artwork before doing expensive extraction
-            let needsArtwork = try await MainActor.run {
-                try db.dbQueue.read { dbConn -> Bool in
-                    guard let albumTitle = metadata.albumTitle, !albumTitle.isEmpty else { return false }
-                    var query = Album.filter(Album.Columns.title == albumTitle)
-                    if let artistName = metadata.artist, !artistName.isEmpty,
-                       let artist = try Artist.filter(Artist.Columns.name == artistName).fetchOne(dbConn)
-                    {
-                        query = query.filter(Album.Columns.artistId == artist.id)
-                    }
-                    if let album = try query.fetchOne(dbConn) {
-                        return album.artworkPath == nil
-                    }
-                    return true // new album, will need artwork
+            // Check if album needs artwork — off main thread
+            let needsArtwork = try await db.dbPool.read { dbConn -> Bool in
+                guard let albumTitle = metadata.albumTitle, !albumTitle.isEmpty else { return false }
+                var query = Album.filter(Album.Columns.title == albumTitle)
+                if let artistName = metadata.artist, !artistName.isEmpty,
+                   let artist = try Artist.filter(Artist.Columns.name == artistName).fetchOne(dbConn)
+                {
+                    query = query.filter(Album.Columns.artistId == artist.id)
                 }
+                if let album = try query.fetchOne(dbConn) {
+                    return album.artworkPath == nil
+                }
+                return true
             }
 
-            var embeddedArtworkData: Data?
+            // Find/extract artwork data — off main thread
+            let artworkData: Data?
             if needsArtwork {
-                embeddedArtworkData = await MetadataReader.extractArtwork(from: fileURL)
+                if let folderArt = Self.findFolderArtworkData(for: fileURL) {
+                    artworkData = folderArt
+                } else {
+                    artworkData = await MetadataReader.extractArtwork(from: fileURL)
+                }
+            } else {
+                artworkData = nil
+            }
+            let hasArtwork = artworkData != nil
+
+            // Write track to DB — off main thread
+            let albumIdNeedingArtwork: Int64? = try await db.dbPool.write { dbConn in
+                if try Track.filter(Track.Columns.filePath == fileURL.path).fetchOne(dbConn) != nil {
+                    return nil
+                }
+
+                var artistId: Int64?
+                if let artistName = metadata.artist, !artistName.isEmpty {
+                    let artist = try LibraryQueries.findOrCreateArtist(name: artistName, in: dbConn)
+                    artistId = artist.id
+                }
+
+                var albumId: Int64?
+                if let albumTitle = metadata.albumTitle, !albumTitle.isEmpty {
+                    let album = try LibraryQueries.findOrCreateAlbum(title: albumTitle, artistId: artistId, in: dbConn)
+                    albumId = album.id
+
+                    if album.year == nil, let year = metadata.year {
+                        var updatedAlbum = album
+                        updatedAlbum.year = year
+                        try updatedAlbum.update(dbConn)
+                    }
+                }
+
+                var track = Track(
+                    filePath: fileURL.path,
+                    title: metadata.title,
+                    albumId: albumId,
+                    artistId: artistId,
+                    genre: metadata.genre,
+                    trackNumber: metadata.trackNumber,
+                    discNumber: metadata.discNumber ?? 1,
+                    duration: metadata.duration,
+                    fileSize: metadata.fileSize,
+                    dateAdded: Date(),
+                    playCount: 0,
+                    lastPlayedAt: nil,
+                    isFavorite: false
+                )
+                try track.insert(dbConn)
+
+                if let aId = albumId, hasArtwork {
+                    let album = try Album.fetchOne(dbConn, key: aId)
+                    if album?.artworkPath == nil { return aId }
+                }
+                return nil
             }
 
-            try await MainActor.run {
-                try db.dbQueue.write { dbConn in
-                    if try Track.filter(Track.Columns.filePath == fileURL.path).fetchOne(dbConn) != nil {
-                        return
+            // Save artwork — only this needs MainActor (for ArtworkCache)
+            if let artworkData, let albumId = albumIdNeedingArtwork {
+                let savedPath = await MainActor.run {
+                    NSImage(data: artworkData).flatMap {
+                        ArtworkCache.shared.saveArtwork($0, for: albumId)
                     }
-
-                    var artistId: Int64?
-                    if let artistName = metadata.artist, !artistName.isEmpty {
-                        let artist = try LibraryQueries.findOrCreateArtist(name: artistName, in: dbConn)
-                        artistId = artist.id
-                    }
-
-                    var albumId: Int64?
-                    if let albumTitle = metadata.albumTitle, !albumTitle.isEmpty {
-                        var album = try LibraryQueries.findOrCreateAlbum(title: albumTitle, artistId: artistId, in: dbConn)
-                        albumId = album.id
-
-                        if album.artworkPath == nil, let aId = albumId {
-                            let artworkImage = findFolderArtwork(for: fileURL)
-                                ?? embeddedArtworkData.flatMap { NSImage(data: $0) }
-                            if let artwork = artworkImage,
-                               let savedPath = ArtworkCache.shared.saveArtwork(artwork, for: aId)
-                            {
-                                album.artworkPath = savedPath
-                                try album.update(dbConn)
-                            }
-                        }
-
-                        if album.year == nil, let year = metadata.year {
-                            album.year = year
+                }
+                if let savedPath {
+                    try? await db.dbPool.write { dbConn in
+                        if var album = try Album.fetchOne(dbConn, key: albumId) {
+                            album.artworkPath = savedPath
                             try album.update(dbConn)
                         }
                     }
-
-                    var track = Track(
-                        filePath: fileURL.path,
-                        title: metadata.title,
-                        albumId: albumId,
-                        artistId: artistId,
-                        genre: metadata.genre,
-                        trackNumber: metadata.trackNumber,
-                        discNumber: metadata.discNumber ?? 1,
-                        duration: metadata.duration,
-                        fileSize: metadata.fileSize,
-                        dateAdded: Date(),
-                        playCount: 0,
-                        lastPlayedAt: nil,
-                        isFavorite: false
-                    )
-                    try track.insert(dbConn)
                 }
             }
         } catch {

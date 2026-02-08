@@ -2,34 +2,44 @@ import AppKit
 import Foundation
 
 @MainActor
-@Observable
 final class ArtworkCache {
     static let shared = ArtworkCache()
 
-    private var memoryCache: [String: NSImage] = [:]
+    private let cache = NSCache<NSString, NSImage>()
     private let cacheDir: URL
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         cacheDir = appSupport.appendingPathComponent("LSLS/Artwork", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        cache.countLimit = 200
     }
 
-    func artwork(for album: Album) -> NSImage? {
+    /// Synchronous cache-only lookup. No disk I/O — safe to call from view body.
+    func cachedArtwork(for album: Album) -> NSImage? {
         guard let albumId = album.id else { return nil }
-        let key = "album-\(albumId)"
+        return cache.object(forKey: "album-\(albumId)" as NSString)
+    }
 
-        if let cached = memoryCache[key] {
+    /// Loads artwork asynchronously, reading file data off the main thread.
+    func loadArtwork(for album: Album) async -> NSImage? {
+        guard let albumId = album.id else { return nil }
+        let key = "album-\(albumId)" as NSString
+
+        if let cached = cache.object(forKey: key) {
             return cached
         }
 
-        if let path = album.artworkPath,
-           let image = NSImage(contentsOfFile: path) {
-            memoryCache[key] = image
-            return image
-        }
+        guard let path = album.artworkPath else { return nil }
 
-        return nil
+        let data: Data? = await Task.detached(priority: .userInitiated) {
+            try? Data(contentsOf: URL(fileURLWithPath: path))
+        }.value
+
+        guard let data, let image = NSImage(data: data) else { return nil }
+
+        cache.setObject(image, forKey: key)
+        return image
     }
 
     func saveArtwork(_ image: NSImage, for albumId: Int64) -> String? {
@@ -44,8 +54,8 @@ final class ArtworkCache {
 
         do {
             try jpegData.write(to: url)
-            let key = "album-\(albumId)"
-            memoryCache[key] = image
+            let key = "album-\(albumId)" as NSString
+            cache.setObject(image, forKey: key)
             return url.path
         } catch {
             print("Failed to save artwork: \(error)")
@@ -54,6 +64,6 @@ final class ArtworkCache {
     }
 
     func clearMemoryCache() {
-        memoryCache.removeAll()
+        cache.removeAllObjects()
     }
 }
