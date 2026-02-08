@@ -9,21 +9,8 @@ final class LibraryManager {
     var importProgress: Double = 0
     var importStatus: String = ""
     var lastImportDate: Date?
-    var libraryFolderPath: String = ""
 
     private let db = DatabaseManager.shared
-
-    func loadLibraryFolder() {
-        libraryFolderPath = (try? db.dbPool.read { db in
-            try SyncSettingRow.filter(Column("key") == "libraryFolderPath").fetchOne(db)?.value
-        }) ?? ""
-    }
-
-    func saveLibraryFolder() {
-        try? db.dbPool.write { db in
-            try SyncSettingRow(key: "libraryFolderPath", value: libraryFolderPath).save(db)
-        }
-    }
 
     func importFolder(_ folderURL: URL) async {
         let gotAccess = folderURL.startAccessingSecurityScopedResource()

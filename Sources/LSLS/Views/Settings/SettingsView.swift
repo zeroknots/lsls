@@ -23,24 +23,13 @@ private struct GeneralSettingsTab: View {
     @Environment(LibraryManager.self) private var libraryManager
 
     var body: some View {
-        @Bindable var libraryManager = libraryManager
-
         Form {
             Section("Music Library") {
                 HStack {
-                    TextField("Library Folder", text: $libraryManager.libraryFolderPath)
-                        .textFieldStyle(.roundedBorder)
-
-                    Button("Browse...") {
-                        browseLibraryFolder()
+                    Button("Import Folder...") {
+                        importFolder()
                     }
-                }
-
-                HStack {
-                    Button("Re-scan Library") {
-                        rescanLibrary()
-                    }
-                    .disabled(libraryManager.libraryFolderPath.isEmpty || libraryManager.isImporting)
+                    .disabled(libraryManager.isImporting)
 
                     if libraryManager.isImporting {
                         ProgressView()
@@ -53,27 +42,17 @@ private struct GeneralSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { libraryManager.loadLibraryFolder() }
-        .onChange(of: libraryManager.libraryFolderPath) {
-            libraryManager.saveLibraryFolder()
-        }
     }
 
-    private func browseLibraryFolder() {
+    private func importFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.message = "Select your music library folder"
+        panel.message = "Select a folder to import music from"
         if panel.runModal() == .OK, let url = panel.url {
-            libraryManager.libraryFolderPath = url.path
-        }
-    }
-
-    private func rescanLibrary() {
-        let path = libraryManager.libraryFolderPath
-        guard !path.isEmpty else { return }
-        Task {
-            await libraryManager.importFolder(URL(fileURLWithPath: path))
+            Task {
+                await libraryManager.importFolder(url)
+            }
         }
     }
 }
