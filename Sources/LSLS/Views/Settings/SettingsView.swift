@@ -30,6 +30,8 @@ struct SettingsView: View {
 
             Section("Sync") {
                 Toggle("Auto-sync when device is connected", isOn: $syncManager.settings.autoSyncEnabled)
+                Toggle("Sync play counts & ratings", isOn: $syncManager.settings.syncPlayCountsEnabled)
+                Toggle("Export playlists to device", isOn: $syncManager.settings.syncPlaylistsEnabled)
 
                 LabeledContent("Items in sync list") {
                     Text("\(syncManager.syncItems.count)")

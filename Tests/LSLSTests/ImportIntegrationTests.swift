@@ -95,23 +95,17 @@ struct ImportIntegrationTests {
         print("Importing \(audioFiles.count) files via LibraryManager.importFile...")
 
         // Use the REAL production LibraryManager + DatabaseManager.shared
+        // WARNING: This test uses the production database. Do NOT delete data.
         let manager = LibraryManager()
         let db = DatabaseManager.shared
 
-        // Clear any existing data first
-        try await db.dbPool.write { dbConn in
-            try Track.deleteAll(dbConn)
-            try Album.deleteAll(dbConn)
-            try Artist.deleteAll(dbConn)
-        }
-
         // Import each file using the actual production code path
+        // importFile is idempotent (skips existing tracks via unique filePath)
         for fileURL in audioFiles {
             await manager.importFile(fileURL)
         }
 
         // Verify results from the real database
-        let expectedCount = audioFiles.count
         try await db.dbPool.read { dbConn in
             let trackCount = try Track.fetchCount(dbConn)
             let albumCount = try Album.fetchCount(dbConn)
@@ -119,7 +113,7 @@ struct ImportIntegrationTests {
 
             print("Results: \(trackCount) tracks, \(albumCount) albums, \(artistCount) artists")
 
-            #expect(trackCount == expectedCount)
+            #expect(trackCount >= audioFiles.count)
             #expect(albumCount >= 6)
             #expect(artistCount >= 1)
 
@@ -149,11 +143,6 @@ struct ImportIntegrationTests {
             #expect(tracksWithoutAlbum == 0)
         }
 
-        // Clean up test data
-        try await db.dbPool.write { dbConn in
-            try Track.deleteAll(dbConn)
-            try Album.deleteAll(dbConn)
-            try Artist.deleteAll(dbConn)
-        }
+        // Do NOT clean up - this is the production database
     }
 }

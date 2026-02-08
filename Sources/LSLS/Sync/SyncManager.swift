@@ -209,6 +209,11 @@ final class SyncManager {
 
             let resolvedTrackIds = Set(resolvedTracks.compactMap { $0.track.id })
 
+            // 2.5 Read changelog from device and merge play counts/favorites
+            if settings.syncPlayCountsEnabled {
+                await readAndMergeChangelog(resolvedTracks: resolvedTracks, logsByTrackId: logsByTrackId, basePath: basePath)
+            }
+
             // 3. Find orphaned files to remove (tracks no longer in sync list)
             let orphanedLogs = existingLogs.filter { !resolvedTrackIds.contains($0.trackId) }
 
@@ -278,7 +283,32 @@ final class SyncManager {
                 await syncArtwork(for: album, artistName: trackInfo.artist?.name, to: basePath)
             }
 
-            // 8. Final status
+            // 7.5 Write changelog to device
+            if settings.syncPlayCountsEnabled {
+                let updatedLogs = try await db.dbPool.read { db in
+                    try LibraryQueries.allSyncLogs(in: db)
+                }
+                let updatedLogsByTrackId = Dictionary(uniqueKeysWithValues: updatedLogs.compactMap { log -> (Int64, SyncLog)? in
+                    (log.trackId, log)
+                })
+                let currentTracks = try await db.dbPool.read { db in
+                    try LibraryQueries.resolvedTracksForSync(in: db)
+                }
+                try await writeChangelog(resolvedTracks: currentTracks, logsByTrackId: updatedLogsByTrackId, basePath: basePath)
+            }
+
+            // 8. Export playlists
+            if settings.syncPlaylistsEnabled {
+                let updatedLogs = try await db.dbPool.read { db in
+                    try LibraryQueries.allSyncLogs(in: db)
+                }
+                let updatedLogsByTrackId = Dictionary(uniqueKeysWithValues: updatedLogs.compactMap { log -> (Int64, SyncLog)? in
+                    (log.trackId, log)
+                })
+                try await syncPlaylists(resolvedTrackIds: resolvedTrackIds, logsByTrackId: updatedLogsByTrackId, basePath: basePath)
+            }
+
+            // 9. Final status
             if failures > 0 {
                 syncStatus = "Synced \(completed) tracks (\(failures) failed)"
             } else {
@@ -291,6 +321,201 @@ final class SyncManager {
 
         isSyncing = false
     }
+
+    // MARK: - Rockbox Changelog Sync
+
+    private func readAndMergeChangelog(
+        resolvedTracks: [TrackInfo],
+        logsByTrackId: [Int64: SyncLog],
+        basePath: URL
+    ) async {
+        syncStatus = "Reading play counts from device..."
+
+        let changelogPath = basePath
+            .appendingPathComponent(".rockbox")
+            .appendingPathComponent("database_changelog.txt")
+
+        let existingEntries: [RockboxChangelogEntry] = await Task.detached(priority: .utility) {
+            guard FileManager.default.fileExists(atPath: changelogPath.path),
+                  let data = FileManager.default.contents(atPath: changelogPath.path),
+                  let content = String(data: data, encoding: .utf8) else {
+                return []
+            }
+            return RockboxChangelog.parse(content)
+        }.value
+
+        guard !existingEntries.isEmpty else { return }
+
+        let entriesByPath = Dictionary(
+            existingEntries.map { ($0.filePath, $0) },
+            uniquingKeysWith: { _, latest in latest }
+        )
+
+        do {
+            try await db.dbPool.write { [entriesByPath] db in
+                for trackInfo in resolvedTracks {
+                    guard let trackId = trackInfo.track.id,
+                          let syncLog = logsByTrackId[trackId] else { continue }
+
+                    let devicePath = "/" + syncLog.devicePath
+
+                    guard let rockboxEntry = entriesByPath[devicePath] else { continue }
+
+                    let mergedPlayCount = max(trackInfo.track.playCount, rockboxEntry.playCount)
+
+                    var mergedLastPlayed = trackInfo.track.lastPlayedAt
+                    if let rockboxLastPlayed = rockboxEntry.lastPlayed {
+                        if let lslsLastPlayed = mergedLastPlayed {
+                            mergedLastPlayed = max(lslsLastPlayed, rockboxLastPlayed)
+                        } else {
+                            mergedLastPlayed = rockboxLastPlayed
+                        }
+                    }
+
+                    let mergedFavorite = trackInfo.track.isFavorite || rockboxEntry.rating >= 8
+
+                    if mergedPlayCount != trackInfo.track.playCount ||
+                       mergedLastPlayed != trackInfo.track.lastPlayedAt ||
+                       mergedFavorite != trackInfo.track.isFavorite {
+                        try db.execute(
+                            sql: "UPDATE track SET playCount = ?, lastPlayedAt = ?, isFavorite = ? WHERE id = ?",
+                            arguments: [mergedPlayCount, mergedLastPlayed, mergedFavorite, trackId]
+                        )
+                    }
+                }
+            }
+        } catch {
+            print("Failed to merge changelog: \(error)")
+        }
+    }
+
+    private func writeChangelog(
+        resolvedTracks: [TrackInfo],
+        logsByTrackId: [Int64: SyncLog],
+        basePath: URL
+    ) async throws {
+        syncStatus = "Writing play counts to device..."
+
+        let changelogPath = basePath
+            .appendingPathComponent(".rockbox")
+            .appendingPathComponent("database_changelog.txt")
+
+        var entries: [RockboxChangelogEntry] = []
+        for trackInfo in resolvedTracks {
+            guard let trackId = trackInfo.track.id,
+                  let syncLog = logsByTrackId[trackId] else { continue }
+
+            entries.append(RockboxChangelogEntry(
+                filePath: "/" + syncLog.devicePath,
+                playCount: trackInfo.track.playCount,
+                rating: trackInfo.track.isFavorite ? 10 : 0,
+                playTime: Int(trackInfo.track.duration * Double(trackInfo.track.playCount) * 1000),
+                lastPlayed: trackInfo.track.lastPlayedAt
+            ))
+        }
+
+        let content = RockboxChangelog.serialize(entries)
+        try await Task.detached(priority: .utility) {
+            try content.write(to: changelogPath, atomically: true, encoding: .utf8)
+        }.value
+    }
+
+    // MARK: - Playlist Export
+
+    private func syncPlaylists(
+        resolvedTrackIds: Set<Int64>,
+        logsByTrackId: [Int64: SyncLog],
+        basePath: URL
+    ) async throws {
+        syncStatus = "Exporting playlists..."
+
+        let playlistsDir = basePath.appendingPathComponent("Playlists")
+        await Task.detached(priority: .utility) {
+            try? FileManager.default.createDirectory(at: playlistsDir, withIntermediateDirectories: true)
+        }.value
+
+        var expectedFiles = Set<String>()
+
+        // Manual playlists
+        let playlists = try await db.dbPool.read { db in
+            try LibraryQueries.allPlaylists(in: db)
+        }
+
+        for playlist in playlists {
+            guard let playlistId = playlist.id else { continue }
+
+            let tracks = try await db.dbPool.read { db in
+                try LibraryQueries.playlistTracks(playlistId, in: db)
+            }
+
+            let devicePaths = tracks.compactMap { trackInfo -> String? in
+                guard let trackId = trackInfo.track.id,
+                      resolvedTrackIds.contains(trackId),
+                      let syncLog = logsByTrackId[trackId] else { return nil }
+                return "/" + syncLog.devicePath
+            }
+
+            guard !devicePaths.isEmpty else { continue }
+
+            let filename = PlaylistExporter.sanitizedFilename(playlist.name) + ".m3u8"
+            expectedFiles.insert(filename)
+
+            let content = PlaylistExporter.generateM3U8(trackPaths: devicePaths)
+            let fileURL = playlistsDir.appendingPathComponent(filename)
+            try await Task.detached(priority: .utility) {
+                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            }.value
+        }
+
+        // Smart playlists
+        let smartPlaylists = try await db.dbPool.read { db in
+            try LibraryQueries.allSmartPlaylists(in: db)
+        }
+
+        for smartPlaylist in smartPlaylists {
+            guard let smartPlaylistId = smartPlaylist.id else { continue }
+
+            let rules = try await db.dbPool.read { db in
+                try LibraryQueries.rulesForSmartPlaylist(smartPlaylistId, in: db)
+            }
+
+            let tracks = try await db.dbPool.read { db in
+                try LibraryQueries.smartPlaylistTracks(rules, in: db)
+            }
+
+            let devicePaths = tracks.compactMap { trackInfo -> String? in
+                guard let trackId = trackInfo.track.id,
+                      resolvedTrackIds.contains(trackId),
+                      let syncLog = logsByTrackId[trackId] else { return nil }
+                return "/" + syncLog.devicePath
+            }
+
+            guard !devicePaths.isEmpty else { continue }
+
+            let filename = PlaylistExporter.sanitizedFilename(smartPlaylist.name) + ".m3u8"
+            expectedFiles.insert(filename)
+
+            let content = PlaylistExporter.generateM3U8(trackPaths: devicePaths)
+            let fileURL = playlistsDir.appendingPathComponent(filename)
+            try await Task.detached(priority: .utility) {
+                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            }.value
+        }
+
+        // Clean up stale playlist files
+        await Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            if let files = try? fm.contentsOfDirectory(atPath: playlistsDir.path) {
+                for file in files where file.hasSuffix(".m3u8") {
+                    if !expectedFiles.contains(file) {
+                        try? fm.removeItem(at: playlistsDir.appendingPathComponent(file))
+                    }
+                }
+            }
+        }.value
+    }
+
+    // MARK: - File Sync
 
     private func syncTrack(_ trackInfo: TrackInfo, to basePath: URL) async throws {
         let sourceFile = trackInfo.track.filePath

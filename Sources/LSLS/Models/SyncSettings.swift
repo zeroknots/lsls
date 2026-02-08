@@ -14,6 +14,8 @@ struct RockboxSettings: Equatable, Sendable {
     var mountPath: String = "/Volumes/ROCKBOX"
     var autoSyncEnabled: Bool = false
     var pollingIntervalSeconds: Int = 10
+    var syncPlayCountsEnabled: Bool = true
+    var syncPlaylistsEnabled: Bool = true
 
     static func load(from db: Database) throws -> RockboxSettings {
         let rows = try SyncSettingRow.fetchAll(db)
@@ -23,6 +25,8 @@ struct RockboxSettings: Equatable, Sendable {
             case "rockboxMountPath": settings.mountPath = row.value
             case "autoSyncEnabled": settings.autoSyncEnabled = row.value == "true"
             case "pollingIntervalSeconds": settings.pollingIntervalSeconds = Int(row.value) ?? 10
+            case "syncPlayCountsEnabled": settings.syncPlayCountsEnabled = row.value == "true"
+            case "syncPlaylistsEnabled": settings.syncPlaylistsEnabled = row.value == "true"
             default: break
             }
         }
@@ -33,5 +37,7 @@ struct RockboxSettings: Equatable, Sendable {
         try SyncSettingRow(key: "rockboxMountPath", value: mountPath).save(db)
         try SyncSettingRow(key: "autoSyncEnabled", value: autoSyncEnabled ? "true" : "false").save(db)
         try SyncSettingRow(key: "pollingIntervalSeconds", value: "\(pollingIntervalSeconds)").save(db)
+        try SyncSettingRow(key: "syncPlayCountsEnabled", value: syncPlayCountsEnabled ? "true" : "false").save(db)
+        try SyncSettingRow(key: "syncPlaylistsEnabled", value: syncPlaylistsEnabled ? "true" : "false").save(db)
     }
 }

@@ -16,7 +16,9 @@ struct PlayQueueTests {
             discNumber: 1,
             duration: 180,
             fileSize: 1000,
-            dateAdded: Date()
+            dateAdded: Date(),
+            playCount: 0,
+            isFavorite: false
         )
         return TrackInfo(track: track, album: nil, artist: nil)
     }
