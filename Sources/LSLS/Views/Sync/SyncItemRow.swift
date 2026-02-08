@@ -40,7 +40,7 @@ struct SyncItemRow: View {
 
     private func resolveDisplayInfo() {
         do {
-            try db.dbQueue.read { db in
+            try db.dbPool.read { db in
                 switch item.itemType {
                 case .track:
                     if let trackId = item.trackId,

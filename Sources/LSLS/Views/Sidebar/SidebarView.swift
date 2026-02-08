@@ -227,7 +227,7 @@ struct SidebarView: View {
 
     private func loadPlaylists() {
         do {
-            playlists = try db.dbQueue.read { db in
+            playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
         } catch {
@@ -238,7 +238,7 @@ struct SidebarView: View {
     private func createPlaylist() {
         guard !newPlaylistName.isEmpty else { return }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 var playlist = Playlist(name: newPlaylistName)
                 try playlist.insert(dbConn)
             }
@@ -251,7 +251,7 @@ struct SidebarView: View {
 
     private func deletePlaylist(_ playlist: Playlist) {
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 _ = try playlist.delete(dbConn)
             }
             loadPlaylists()
@@ -262,7 +262,7 @@ struct SidebarView: View {
 
     private func loadSmartPlaylists() {
         do {
-            smartPlaylists = try db.dbQueue.read { db in
+            smartPlaylists = try db.dbPool.read { db in
                 try LibraryQueries.allSmartPlaylists(in: db)
             }
         } catch {
@@ -273,7 +273,7 @@ struct SidebarView: View {
     private func deleteSmartPlaylist(_ sp: SmartPlaylist) {
         guard let id = sp.id else { return }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteSmartPlaylist(id, in: dbConn)
             }
             loadSmartPlaylists()
@@ -307,13 +307,13 @@ struct SidebarView: View {
             switch item {
             case .track(let trackInfo):
                 if let trackId = trackInfo.track.id {
-                    try? db.dbQueue.write { dbConn in
+                    try? db.dbPool.write { dbConn in
                         try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
                     }
                 }
             case .album(let albumInfo):
                 if let albumId = albumInfo.album.id {
-                    try? db.dbQueue.write { dbConn in
+                    try? db.dbPool.write { dbConn in
                         let tracks = try LibraryQueries.tracksForAlbum(albumId, in: dbConn)
                         for track in tracks {
                             if let trackId = track.track.id {
@@ -324,7 +324,7 @@ struct SidebarView: View {
                 }
             case .artist(let artist):
                 if let artistId = artist.id {
-                    try? db.dbQueue.write { dbConn in
+                    try? db.dbPool.write { dbConn in
                         let tracks = try LibraryQueries.tracksForArtist(artistId, in: dbConn)
                         for track in tracks {
                             if let trackId = track.track.id {

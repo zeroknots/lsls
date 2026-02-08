@@ -28,7 +28,7 @@ final class SyncManager {
 
     func loadSettings() {
         do {
-            settings = try db.dbQueue.read { db in
+            settings = try db.dbPool.read { db in
                 try RockboxSettings.load(from: db)
             }
         } catch {
@@ -38,7 +38,7 @@ final class SyncManager {
 
     func saveSettings() {
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 try settings.save(to: db)
             }
         } catch {
@@ -50,7 +50,7 @@ final class SyncManager {
 
     func addTrack(_ trackId: Int64) {
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 guard try !LibraryQueries.syncItemExists(itemType: .track, trackId: trackId, in: db) else { return }
                 var item = SyncItem(trackId: trackId)
                 try item.insert(db)
@@ -63,7 +63,7 @@ final class SyncManager {
 
     func addAlbum(_ albumId: Int64) {
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 guard try !LibraryQueries.syncItemExists(itemType: .album, albumId: albumId, in: db) else { return }
                 var item = SyncItem(albumId: albumId)
                 try item.insert(db)
@@ -76,7 +76,7 @@ final class SyncManager {
 
     func addArtist(_ artistId: Int64) {
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 guard try !LibraryQueries.syncItemExists(itemType: .artist, artistId: artistId, in: db) else { return }
                 var item = SyncItem(artistId: artistId)
                 try item.insert(db)
@@ -89,7 +89,7 @@ final class SyncManager {
 
     func removeSyncItem(_ item: SyncItem) {
         do {
-            try db.dbQueue.write { db in
+            try db.dbPool.write { db in
                 _ = try item.delete(db)
             }
             loadSyncItems()
@@ -99,26 +99,26 @@ final class SyncManager {
     }
 
     func isTrackInSyncList(_ trackId: Int64) -> Bool {
-        (try? db.dbQueue.read { db in
+        (try? db.dbPool.read { db in
             try LibraryQueries.syncItemExists(itemType: .track, trackId: trackId, in: db)
         }) ?? false
     }
 
     func isAlbumInSyncList(_ albumId: Int64) -> Bool {
-        (try? db.dbQueue.read { db in
+        (try? db.dbPool.read { db in
             try LibraryQueries.syncItemExists(itemType: .album, albumId: albumId, in: db)
         }) ?? false
     }
 
     func isArtistInSyncList(_ artistId: Int64) -> Bool {
-        (try? db.dbQueue.read { db in
+        (try? db.dbPool.read { db in
             try LibraryQueries.syncItemExists(itemType: .artist, artistId: artistId, in: db)
         }) ?? false
     }
 
     func loadSyncItems() {
         do {
-            syncItems = try db.dbQueue.read { db in
+            syncItems = try db.dbPool.read { db in
                 try LibraryQueries.allSyncItems(in: db)
             }
         } catch {
@@ -189,7 +189,7 @@ final class SyncManager {
 
         do {
             // 1. Resolve all tracks to sync
-            let resolvedTracks = try await db.dbQueue.read { db in
+            let resolvedTracks = try await db.dbPool.read { db in
                 try LibraryQueries.resolvedTracksForSync(in: db)
             }
 
@@ -200,7 +200,7 @@ final class SyncManager {
             }
 
             // 2. Load existing sync log
-            let existingLogs = try await db.dbQueue.read { db in
+            let existingLogs = try await db.dbPool.read { db in
                 try LibraryQueries.allSyncLogs(in: db)
             }
             let logsByTrackId = Dictionary(uniqueKeysWithValues: existingLogs.compactMap { log -> (Int64, SyncLog)? in
@@ -219,7 +219,7 @@ final class SyncManager {
                     let filePath = basePath.appendingPathComponent(devicePath)
                     try? FileManager.default.removeItem(at: filePath)
                 }.value
-                try await db.dbQueue.write { db in
+                try await db.dbPool.write { db in
                     _ = try log.delete(db)
                 }
             }
@@ -325,7 +325,7 @@ final class SyncManager {
         }.value
 
         // Update sync log back on main actor
-        try await db.dbQueue.write { db in
+        try await db.dbPool.write { db in
             if let trackId {
                 try SyncLog
                     .filter(SyncLog.Columns.trackId == trackId)

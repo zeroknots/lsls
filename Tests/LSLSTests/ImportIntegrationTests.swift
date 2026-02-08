@@ -99,7 +99,7 @@ struct ImportIntegrationTests {
         let db = DatabaseManager.shared
 
         // Clear any existing data first
-        try await db.dbQueue.write { dbConn in
+        try await db.dbPool.write { dbConn in
             try Track.deleteAll(dbConn)
             try Album.deleteAll(dbConn)
             try Artist.deleteAll(dbConn)
@@ -112,7 +112,7 @@ struct ImportIntegrationTests {
 
         // Verify results from the real database
         let expectedCount = audioFiles.count
-        try await db.dbQueue.read { dbConn in
+        try await db.dbPool.read { dbConn in
             let trackCount = try Track.fetchCount(dbConn)
             let albumCount = try Album.fetchCount(dbConn)
             let artistCount = try Artist.fetchCount(dbConn)
@@ -150,7 +150,7 @@ struct ImportIntegrationTests {
         }
 
         // Clean up test data
-        try await db.dbQueue.write { dbConn in
+        try await db.dbPool.write { dbConn in
             try Track.deleteAll(dbConn)
             try Album.deleteAll(dbConn)
             try Artist.deleteAll(dbConn)

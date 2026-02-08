@@ -99,7 +99,7 @@ struct TrackEditView: View {
 
     private func loadArtists() {
         do {
-            allArtists = try db.dbQueue.read { db in
+            allArtists = try db.dbPool.read { db in
                 try LibraryQueries.allArtists(in: db)
             }
         } catch {
@@ -113,7 +113,7 @@ struct TrackEditView: View {
         guard !trimmedTitle.isEmpty else { return }
 
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 var artistId = selectedArtistId
 
                 if useNewArtist {

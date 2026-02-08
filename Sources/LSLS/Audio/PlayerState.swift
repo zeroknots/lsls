@@ -102,29 +102,33 @@ final class PlayerState {
 
     func addAlbumToQueue(_ albumId: Int64) {
         let db = DatabaseManager.shared
-        do {
-            let tracks = try db.dbQueue.read { db in
-                try LibraryQueries.tracksForAlbum(albumId, in: db)
+        Task {
+            do {
+                let tracks = try await db.dbPool.read { db in
+                    try LibraryQueries.tracksForAlbum(albumId, in: db)
+                }
+                for track in tracks {
+                    queue.appendToEnd(track)
+                }
+            } catch {
+                print("Failed to load album tracks for queue: \(error)")
             }
-            for track in tracks {
-                queue.appendToEnd(track)
-            }
-        } catch {
-            print("Failed to load album tracks for queue: \(error)")
         }
     }
 
     func addArtistToQueue(_ artistId: Int64) {
         let db = DatabaseManager.shared
-        do {
-            let tracks = try db.dbQueue.read { db in
-                try LibraryQueries.tracksForArtist(artistId, in: db)
+        Task {
+            do {
+                let tracks = try await db.dbPool.read { db in
+                    try LibraryQueries.tracksForArtist(artistId, in: db)
+                }
+                for track in tracks {
+                    queue.appendToEnd(track)
+                }
+            } catch {
+                print("Failed to load artist tracks for queue: \(error)")
             }
-            for track in tracks {
-                queue.appendToEnd(track)
-            }
-        } catch {
-            print("Failed to load artist tracks for queue: \(error)")
         }
     }
 
@@ -202,8 +206,10 @@ final class PlayerState {
     private func recordPlay() {
         guard let trackId = currentTrack?.track.id else { return }
         let db = DatabaseManager.shared
-        try? db.dbQueue.write { dbConn in
-            try LibraryQueries.recordPlay(trackId: trackId, in: dbConn)
+        Task.detached(priority: .utility) {
+            try? await db.dbPool.write { dbConn in
+                try LibraryQueries.recordPlay(trackId: trackId, in: dbConn)
+            }
         }
     }
 }

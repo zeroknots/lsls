@@ -1,6 +1,41 @@
 import AppKit
 import SwiftUI
 
+private struct MenuBarAlbumArtView: View {
+    let album: Album?
+    @State private var image: NSImage?
+
+    var body: some View {
+        let displayImage = image ?? album.flatMap({ ArtworkCache.shared.cachedArtwork(for: $0) })
+
+        Group {
+            if let displayImage {
+                Image(nsImage: displayImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Image(systemName: "music.note")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .frame(width: 120, height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+        .task(id: album?.id) {
+            guard let album, image == nil else { return }
+            image = await ArtworkCache.shared.loadArtwork(for: album)
+        }
+    }
+}
+
 struct MenuBarPlayerView: View {
     @Environment(PlayerState.self) private var playerState
 
@@ -78,30 +113,8 @@ struct MenuBarPlayerView: View {
 
     // MARK: - Album Art
 
-    @ViewBuilder
     private func albumArt(for track: TrackInfo) -> some View {
-        Group {
-            if let album = track.album,
-               let image = ArtworkCache.shared.artwork(for: album) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                ZStack {
-                    LinearGradient(
-                        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    Image(systemName: "music.note")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .frame(width: 120, height: 120)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+        MenuBarAlbumArtView(album: track.album)
     }
 
     // MARK: - Progress
@@ -292,14 +305,14 @@ struct MenuBarPlayerView: View {
             isFavorite = false
             return
         }
-        isFavorite = (try? db.dbQueue.read { db in
+        isFavorite = (try? db.dbPool.read { db in
             try LibraryQueries.isFavorite(trackId: trackId, in: db)
         }) ?? false
     }
 
     private func toggleFavorite() {
         guard let trackId = playerState.currentTrack?.track.id else { return }
-        try? db.dbQueue.write { dbConn in
+        try? db.dbPool.write { dbConn in
             try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
         }
         isFavorite.toggle()

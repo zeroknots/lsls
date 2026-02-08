@@ -95,7 +95,7 @@ struct SongListView: View {
 
     private func loadTracks() {
         do {
-            tracks = try db.dbQueue.read { db in
+            tracks = try db.dbPool.read { db in
                 try LibraryQueries.allTracks(in: db)
             }
         } catch {
@@ -105,7 +105,7 @@ struct SongListView: View {
 
     private func loadPlaylists() {
         do {
-            playlists = try db.dbQueue.read { db in
+            playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
         } catch {
@@ -116,7 +116,7 @@ struct SongListView: View {
     private func addTrackToPlaylist(_ trackInfo: TrackInfo, playlist: Playlist) {
         guard let trackId = trackInfo.track.id, let playlistId = playlist.id else { return }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.addTrackToPlaylist(trackId: trackId, playlistId: playlistId, in: dbConn)
             }
         } catch {
@@ -126,7 +126,7 @@ struct SongListView: View {
 
     private func toggleFavorite(_ trackInfo: TrackInfo) {
         guard let trackId = trackInfo.track.id else { return }
-        try? db.dbQueue.write { dbConn in
+        try? db.dbPool.write { dbConn in
             try LibraryQueries.toggleFavorite(trackId: trackId, in: dbConn)
         }
         loadTracks()
@@ -138,7 +138,7 @@ struct SongListView: View {
             playerState.playNext()
         }
         do {
-            try db.dbQueue.write { dbConn in
+            try db.dbPool.write { dbConn in
                 try LibraryQueries.deleteTrack(trackId, in: dbConn)
             }
             loadTracks()
