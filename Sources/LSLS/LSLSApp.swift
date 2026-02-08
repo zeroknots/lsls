@@ -120,24 +120,6 @@ struct LSLSApp: App {
                 }
                 .keyboardShortcut("p", modifiers: .command)
             }
-
-            CommandMenu("Theme") {
-                ForEach(BuiltInThemes.all, id: \.meta.name) { theme in
-                    Button(theme.meta.name) {
-                        themeManager.applyBuiltIn(theme)
-                    }
-                }
-
-                Divider()
-
-                Button("Open Theme File") {
-                    themeManager.openThemeFile()
-                }
-
-                Button("Reload Theme") {
-                    themeManager.reload()
-                }
-            }
         }
 
         MenuBarExtra("LS", isInserted: .constant(true)) {
@@ -149,6 +131,8 @@ struct LSLSApp: App {
         Settings {
             SettingsView()
                 .environment(syncManager)
+                .environment(themeManager)
+                .environment(libraryManager)
         }
     }
 }
