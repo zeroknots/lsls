@@ -38,6 +38,7 @@ struct LSLSApp: App {
     @State private var libraryManager = LibraryManager()
     @State private var themeManager = ThemeManager()
     @State private var syncManager = SyncManager()
+    @State private var rockboxThemeManager = RockboxThemeManager()
     @State private var plexState = PlexConnectionState()
     @State private var updateChecker = UpdateChecker()
     @State private var navigationRequest = NavigationRequest()
@@ -55,9 +56,13 @@ struct LSLSApp: App {
                 .environment(plexState)
                 .environment(themeManager)
                 .environment(syncManager)
+                .environment(rockboxThemeManager)
                 .environment(navigationRequest)
                 .frame(minWidth: 900, minHeight: 600)
-                .task { updateChecker.checkForUpdates() }
+                .task {
+                    syncManager.themeManager = rockboxThemeManager
+                    updateChecker.checkForUpdates()
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
@@ -131,6 +136,7 @@ struct LSLSApp: App {
         Settings {
             SettingsView()
                 .environment(syncManager)
+                .environment(rockboxThemeManager)
                 .environment(themeManager)
                 .environment(libraryManager)
         }

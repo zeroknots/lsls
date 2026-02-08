@@ -13,6 +13,7 @@ final class SyncManager {
     var syncError: String?
     var lastSyncDate: Date?
     var syncItems: [SyncItem] = []
+    var themeManager: RockboxThemeManager?
 
     private let db = DatabaseManager.shared
     private var pollingTask: Task<Void, Never>?
@@ -308,7 +309,16 @@ final class SyncManager {
                 try await syncPlaylists(resolvedTrackIds: resolvedTrackIds, logsByTrackId: updatedLogsByTrackId, basePath: basePath)
             }
 
-            // 9. Final status
+            // 9. Sync Rockbox themes
+            if settings.syncThemesEnabled, let themeManager, !themeManager.installedThemes.isEmpty {
+                syncStatus = "Installing themes..."
+                try await themeManager.installThemesToDevice(
+                    themes: themeManager.installedThemes,
+                    deviceMountPath: settings.mountPath
+                )
+            }
+
+            // 10. Final status
             if failures > 0 {
                 syncStatus = "Synced \(completed) tracks (\(failures) failed)"
             } else {
