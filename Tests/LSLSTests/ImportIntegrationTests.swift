@@ -19,25 +19,26 @@ struct ImportIntegrationTests {
         return toolFolder
     }
 
-    @Test("scan finds all FLAC files in TOOL discography")
-    func scanFiles() throws {
-        let folder = try Self.requireToolFolder()
-
+    private static func scanAudioFiles(in folder: URL) -> [URL] {
         var audioFiles: [URL] = []
-        let enumerator = try #require(
-            FileManager.default.enumerator(
-                at: folder,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles]
-            ))
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
 
         for case let fileURL as URL in enumerator {
-            let ext = fileURL.pathExtension.lowercased()
-            if MetadataReader.supportedExtensions.contains(ext) {
+            if MetadataReader.supportedExtensions.contains(fileURL.pathExtension.lowercased()) {
                 audioFiles.append(fileURL)
             }
         }
+        return audioFiles.sorted { $0.path < $1.path }
+    }
 
+    @Test("scan finds all FLAC files in TOOL discography")
+    func scanFiles() throws {
+        let folder = try Self.requireToolFolder()
+        let audioFiles = Self.scanAudioFiles(in: folder)
         print("Found \(audioFiles.count) audio files")
         #expect(audioFiles.count > 50)
     }
@@ -78,20 +79,7 @@ struct ImportIntegrationTests {
     func fullImportPipeline() async throws {
         let folder = try Self.requireToolFolder()
 
-        // Scan for files
-        var audioFiles: [URL] = []
-        let enumerator = try #require(
-            FileManager.default.enumerator(
-                at: folder,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles]
-            ))
-        for case let fileURL as URL in enumerator {
-            if MetadataReader.supportedExtensions.contains(fileURL.pathExtension.lowercased()) {
-                audioFiles.append(fileURL)
-            }
-        }
-        audioFiles.sort { $0.path < $1.path }
+        let audioFiles = Self.scanAudioFiles(in: folder)
         let fileCount = audioFiles.count
         print("Importing \(fileCount) files via LibraryManager.importFile...")
 
