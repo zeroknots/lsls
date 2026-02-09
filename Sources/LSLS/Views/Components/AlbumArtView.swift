@@ -40,7 +40,6 @@ struct AlbumArtView: View {
             radius: theme.effects.albumArtShadowRadius,
             y: 2
         )
-        .drawingGroup()
         .task(id: album?.artworkPath) {
             guard let album, artworkURL == nil else { return }
             loadedImage = await ArtworkCache.shared.loadArtwork(for: album)
