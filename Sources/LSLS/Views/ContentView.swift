@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var selectedSection: SidebarSection? = .albums
     @State private var selectedAlbum: Album?
     @State private var forwardAlbum: Album?
+    @State private var selectedPodcast: Podcast?
     @State private var searchText = ""
 
     var body: some View {
@@ -38,6 +39,9 @@ struct ContentView: View {
                     selectedAlbum = nil
                     forwardAlbum = nil
                 }
+                if selectedPodcast != nil {
+                    selectedPodcast = nil
+                }
             }
             .toolbar {
                 ToolbarItemGroup(placement: .navigation) {
@@ -46,7 +50,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                     }
-                    .disabled(selectedAlbum == nil)
+                    .disabled(selectedAlbum == nil && selectedPodcast == nil)
 
                     Button {
                         navigateForward()
@@ -143,6 +147,10 @@ struct ContentView: View {
     private var detailContent: some View {
         if let album = selectedAlbum {
             AlbumDetailView(album: album)
+        } else if let podcast = selectedPodcast {
+            PodcastDetailView(podcast: podcast) {
+                selectedPodcast = nil
+            }
         } else {
             sectionContent
         }
@@ -167,6 +175,8 @@ struct ContentView: View {
             SearchResultsView(searchText: $searchText, selectedAlbum: $selectedAlbum)
         case .syncList:
             SyncListView()
+        case .podcasts:
+            PodcastSearchView(selectedPodcast: $selectedPodcast)
         case .plexAlbums:
             PlexAlbumGridView()
         case .plexArtists:
@@ -180,6 +190,10 @@ struct ContentView: View {
     }
 
     private func navigateBack() {
+        if selectedPodcast != nil {
+            selectedPodcast = nil
+            return
+        }
         guard selectedAlbum != nil else { return }
         forwardAlbum = selectedAlbum
         selectedAlbum = nil

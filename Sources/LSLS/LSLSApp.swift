@@ -42,6 +42,7 @@ struct LSLSApp: App {
     @State private var plexState = PlexConnectionState()
     @State private var updateChecker = UpdateChecker()
     @State private var navigationRequest = NavigationRequest()
+    @State private var podcastManager = PodcastManager()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -58,9 +59,11 @@ struct LSLSApp: App {
                 .environment(syncManager)
                 .environment(rockboxThemeManager)
                 .environment(navigationRequest)
+                .environment(podcastManager)
                 .frame(minWidth: 900, minHeight: 600)
                 .task {
                     syncManager.themeManager = rockboxThemeManager
+                    podcastManager.playerState = playerState
                     updateChecker.checkForUpdates()
                 }
         }
@@ -139,6 +142,7 @@ struct LSLSApp: App {
                 .environment(rockboxThemeManager)
                 .environment(themeManager)
                 .environment(libraryManager)
+                .environment(podcastManager)
         }
     }
 }

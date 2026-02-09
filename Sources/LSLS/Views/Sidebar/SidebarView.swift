@@ -10,6 +10,7 @@ enum SidebarSection: Hashable {
     case playlist(Playlist)
     case smartPlaylist(SmartPlaylist)
     case syncList
+    case podcasts
     case plexAlbums
     case plexArtists
     case plexSettings
@@ -22,6 +23,7 @@ struct SidebarView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
+    @Environment(PodcastManager.self) private var podcastManager
     @State private var playlists: [Playlist] = []
     @State private var smartPlaylists: [SmartPlaylist] = []
     @State private var showNewPlaylist = false
@@ -39,6 +41,41 @@ struct SidebarView: View {
                 sidebarRow("Recently Added", icon: "clock", tag: .recentlyAdded)
             } header: {
                 Text("Library")
+                    .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+                    .textCase(nil)
+            }
+
+            Section {
+                Label {
+                    HStack {
+                        Text("Podcasts")
+                            .foregroundStyle(colors.textPrimary)
+                        Spacer()
+                        Button {
+                            Task { await podcastManager.refreshAllFeeds() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: theme.typography.smallCaptionSize))
+                                .foregroundStyle(podcastManager.isRefreshing ? colors.accent : colors.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(podcastManager.isRefreshing)
+                        .help("Refresh all podcast feeds")
+                    }
+                } icon: {
+                    Image(systemName: "mic")
+                        .font(.system(size: theme.typography.captionSize))
+                        .foregroundStyle(colors.accent)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(colors.accentSubtle)
+                        )
+                }
+                .tag(SidebarSection.podcasts)
+            } header: {
+                Text("Podcasts")
                     .font(.system(size: theme.typography.smallCaptionSize, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
                     .textCase(nil)
@@ -137,7 +174,7 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if libraryManager.isImporting || syncManager.isSyncing {
+            if libraryManager.isImporting || syncManager.isSyncing || podcastManager.isDownloading || podcastManager.isRefreshing {
                 VStack(spacing: 0) {
                     Divider()
                     VStack(spacing: 8) {
@@ -172,6 +209,48 @@ struct SidebarView: View {
                                 ProgressView(value: syncManager.syncProgress)
                                     .tint(colors.accent)
                                 Text(syncManager.syncStatus)
+                                    .font(.system(size: theme.typography.smallCaptionSize))
+                                    .foregroundStyle(colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if podcastManager.isDownloading {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.down.circle")
+                                        .font(.caption)
+                                        .foregroundStyle(colors.accent)
+                                    Text("Downloading Episode")
+                                        .font(.system(size: theme.typography.captionSize, weight: .medium))
+                                        .foregroundStyle(colors.textPrimary)
+                                }
+                                if podcastManager.downloadProgress > 0 {
+                                    ProgressView(value: podcastManager.downloadProgress)
+                                        .tint(colors.accent)
+                                } else {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                Text(podcastManager.downloadStatus)
+                                    .font(.system(size: theme.typography.smallCaptionSize))
+                                    .foregroundStyle(colors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        } else if podcastManager.isRefreshing {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "antenna.radiowaves.left.and.right")
+                                        .font(.caption)
+                                        .foregroundStyle(colors.accent)
+                                    Text("Refreshing Feeds")
+                                        .font(.system(size: theme.typography.captionSize, weight: .medium))
+                                        .foregroundStyle(colors.textPrimary)
+                                }
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(podcastManager.refreshStatus)
                                     .font(.system(size: theme.typography.smallCaptionSize))
                                     .foregroundStyle(colors.textSecondary)
                                     .lineLimit(1)
