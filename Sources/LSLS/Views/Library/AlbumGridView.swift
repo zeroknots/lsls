@@ -7,6 +7,7 @@ struct AlbumGridView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
+    @Environment(VimNavigation.self) private var vimNav
     @State private var albums: [AlbumInfo] = []
     @State private var albumToDelete: AlbumInfo? = nil
     @State private var selectedAlbumIds: Set<Int64> = []
@@ -29,75 +30,101 @@ struct AlbumGridView: View {
     }
 
     var body: some View {
-        ScrollView {
-            if albums.isEmpty {
-                ContentUnavailableView {
-                    Label("No Albums", systemImage: "music.note")
-                } description: {
-                    Text("Import a folder to get started")
-                }
-                .foregroundStyle(colors.textSecondary)
-                .padding(.top, 100)
-            } else {
-                LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
-                    ForEach(albums) { albumInfo in
-                        let albumId = albumInfo.album.id ?? -1
-                        let isInSelection = selectedAlbumIds.contains(albumId)
+        ScrollViewReader { proxy in
+            ScrollView {
+                if albums.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Albums", systemImage: "music.note")
+                    } description: {
+                        Text("Import a folder to get started")
+                    }
+                    .foregroundStyle(colors.textSecondary)
+                    .padding(.top, 100)
+                } else {
+                    LazyVGrid(columns: columns, spacing: theme.spacing.sectionSpacing) {
+                        ForEach(Array(albums.enumerated()), id: \.element.id) { index, albumInfo in
+                            let albumId = albumInfo.album.id ?? -1
+                            let isInSelection = selectedAlbumIds.contains(albumId)
 
-                        AlbumCard(
-                            albumInfo: albumInfo,
-                            isSelected: isInSelection
-                        ) { withCommand in
-                            if withCommand {
-                                if selectedAlbumIds.contains(albumId) {
-                                    selectedAlbumIds.remove(albumId)
-                                } else {
-                                    selectedAlbumIds.insert(albumId)
-                                }
-                            } else {
-                                selectedAlbumIds.removeAll()
-                                selectedAlbum = albumInfo.album
-                            }
-                        }
-                        .contextMenu {
-                            if isInSelection && selectedAlbumIds.count >= 2 {
-                                Button("Merge...") {
-                                    showMergeSheet = true
-                                }
-
-                                Divider()
-
-                                Button("Delete \(selectedAlbumIds.count) Albums", role: .destructive) {
-                                    deleteSelectedAlbums()
-                                }
-                            } else {
-                                if let aid = albumInfo.album.id {
-                                    if syncManager.isAlbumInSyncList(aid) {
-                                        Button("Remove Album from Sync List", role: .destructive) {
-                                            if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == aid }) {
-                                                syncManager.removeSyncItem(item)
-                                            }
-                                        }
+                            AlbumCard(
+                                albumInfo: albumInfo,
+                                isSelected: isInSelection
+                            ) { withCommand in
+                                if withCommand {
+                                    if selectedAlbumIds.contains(albumId) {
+                                        selectedAlbumIds.remove(albumId)
                                     } else {
-                                        Button("Add Album to Sync List") {
-                                            syncManager.addAlbum(aid)
-                                        }
+                                        selectedAlbumIds.insert(albumId)
+                                    }
+                                } else {
+                                    selectedAlbumIds.removeAll()
+                                    selectedAlbum = albumInfo.album
+                                }
+                            }
+                            .overlay {
+                                if vimNav.isActive && vimNav.focusZone == .content && index == vimNav.contentIndex {
+                                    RoundedRectangle(cornerRadius: theme.shapes.albumArtRadius)
+                                        .stroke(colors.accent, lineWidth: 2.5)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .contextMenu {
+                                if isInSelection && selectedAlbumIds.count >= 2 {
+                                    Button("Merge...") {
+                                        showMergeSheet = true
                                     }
 
                                     Divider()
 
-                                    Button("Delete Album", role: .destructive) {
-                                        albumToDelete = albumInfo
+                                    Button("Delete \(selectedAlbumIds.count) Albums", role: .destructive) {
+                                        deleteSelectedAlbums()
+                                    }
+                                } else {
+                                    if let aid = albumInfo.album.id {
+                                        if syncManager.isAlbumInSyncList(aid) {
+                                            Button("Remove Album from Sync List", role: .destructive) {
+                                                if let item = syncManager.syncItems.first(where: { $0.itemType == .album && $0.albumId == aid }) {
+                                                    syncManager.removeSyncItem(item)
+                                                }
+                                            }
+                                        } else {
+                                            Button("Add Album to Sync List") {
+                                                syncManager.addAlbum(aid)
+                                            }
+                                        }
+
+                                        Divider()
+
+                                        Button("Delete Album", role: .destructive) {
+                                            albumToDelete = albumInfo
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    .padding(theme.spacing.contentPadding)
                 }
-                .padding(theme.spacing.contentPadding)
+            }
+            .onChange(of: vimNav.enterTrigger) {
+                guard vimNav.isActive, vimNav.focusZone == .content else { return }
+                guard vimNav.contentIndex >= 0 && vimNav.contentIndex < albums.count else { return }
+                selectedAlbum = albums[vimNav.contentIndex].album
+            }
+            .onChange(of: vimNav.contentIndex) { _, newIndex in
+                guard vimNav.isActive, vimNav.focusZone == .content else { return }
+                if newIndex >= 0 && newIndex < albums.count {
+                    withAnimation { proxy.scrollTo(albums[newIndex].id, anchor: .center) }
+                }
             }
         }
-        .background(colors.background)
+        .background(
+            GeometryReader { geo in
+                colors.background
+                    .onAppear { updateGridColumns(containerWidth: geo.size.width) }
+                    .onChange(of: geo.size.width) { _, w in updateGridColumns(containerWidth: w) }
+            }
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             selectedAlbumIds.removeAll()
@@ -115,6 +142,9 @@ struct AlbumGridView: View {
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadAlbums()
+        }
+        .onChange(of: selectedAlbumIds) {
+            vimNav.hasActiveSelection = !selectedAlbumIds.isEmpty
         }
         .sheet(isPresented: $showMergeSheet) {
             MergeAlbumsView(selectedAlbums: selectedAlbumInfos) {
@@ -168,8 +198,19 @@ struct AlbumGridView: View {
             albums = try db.dbPool.read { db in
                 try LibraryQueries.allAlbums(in: db)
             }
+            vimNav.contentItemCount = albums.count
+            vimNav.isGridMode = true
         } catch {
             print("Failed to load albums: \(error)")
         }
+    }
+
+    private func updateGridColumns(containerWidth: CGFloat) {
+        let itemSize = theme.spacing.gridItemSize
+        let spacing = theme.spacing.gridSpacing
+        let padding = theme.spacing.contentPadding * 2
+        let available = containerWidth - padding
+        let cols = max(1, Int((available + spacing) / (itemSize + spacing)))
+        vimNav.gridColumns = cols
     }
 }

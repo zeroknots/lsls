@@ -6,6 +6,7 @@ struct SongListView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.themeColors) private var colors
     @Environment(SyncManager.self) private var syncManager
+    @Environment(VimNavigation.self) private var vimNav
     @State private var tracks: [TrackInfo] = []
     @State private var playlists: [Playlist] = []
     @State private var trackToEdit: TrackInfo? = nil
@@ -23,6 +24,7 @@ struct SongListView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         List {
             if tracks.isEmpty {
                 ContentUnavailableView {
@@ -32,8 +34,17 @@ struct SongListView: View {
                 }
                 .foregroundStyle(colors.textSecondary)
             } else {
-                ForEach(tracks) { trackInfo in
+                ForEach(Array(tracks.enumerated()), id: \.element.id) { index, trackInfo in
+                    let isVimHighlighted = vimNav.isActive && vimNav.focusZone == .content && index == vimNav.contentIndex
                     trackRow(for: trackInfo)
+                        .id(trackInfo.id)
+                        .listRowBackground(
+                            Group {
+                                if isVimHighlighted {
+                                    RoundedRectangle(cornerRadius: 6).fill(colors.accent.opacity(0.1))
+                                }
+                            }
+                        )
                 }
             }
         }
@@ -51,9 +62,24 @@ struct SongListView: View {
         .task {
             loadTracks()
             loadPlaylists()
+            vimNav.contentItemCount = tracks.count
         }
         .onChange(of: libraryManager.lastImportDate) {
             loadTracks()
+        }
+        .onChange(of: vimNav.enterTrigger) {
+            guard vimNav.isActive, vimNav.focusZone == .content else { return }
+            guard vimNav.contentIndex >= 0 && vimNav.contentIndex < tracks.count else { return }
+            playerState.play(track: tracks[vimNav.contentIndex], fromQueue: tracks)
+        }
+        .onChange(of: vimNav.contentIndex) { _, newIndex in
+            guard vimNav.isActive, vimNav.focusZone == .content else { return }
+            if newIndex >= 0 && newIndex < tracks.count {
+                withAnimation { proxy.scrollTo(tracks[newIndex].id, anchor: .center) }
+            }
+        }
+        .onChange(of: selectedTrackIds) {
+            vimNav.hasActiveSelection = !selectedTrackIds.isEmpty
         }
         .sheet(item: $trackToEdit) { trackInfo in
             TrackEditView(trackInfo: trackInfo) {
@@ -80,6 +106,7 @@ struct SongListView: View {
         } message: {
             Text("This will remove \"\(trackToDelete?.track.title ?? "")\" from your library and all playlists.")
         }
+        } // ScrollViewReader
     }
 
     @ViewBuilder
@@ -148,6 +175,7 @@ struct SongListView: View {
             tracks = try db.dbPool.read { db in
                 try LibraryQueries.allTracks(in: db)
             }
+            vimNav.contentItemCount = tracks.count
         } catch {
             print("Failed to load tracks: \(error)")
         }

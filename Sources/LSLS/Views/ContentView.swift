@@ -5,12 +5,14 @@ struct ContentView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(PlexConnectionState.self) private var plexState
     @Environment(NavigationRequest.self) private var navigationRequest
+    @Environment(VimNavigation.self) private var vimNav
     @Environment(\.themeColors) private var colors
     @State private var selectedSection: SidebarSection? = .albums
     @State private var selectedAlbum: Album?
     @State private var forwardAlbum: Album?
     @State private var selectedPodcast: Podcast?
     @State private var searchText = ""
+    @FocusState private var isContainerFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -42,6 +44,7 @@ struct ContentView: View {
                 if selectedPodcast != nil {
                     selectedPodcast = nil
                 }
+                vimNav.resetContentState()
             }
             .toolbar {
                 ToolbarItemGroup(placement: .navigation) {
@@ -86,6 +89,78 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+        }
+        .focusable()
+        .focused($isContainerFocused)
+        .onKeyPress(.escape) {
+            guard !navigationRequest.isCommandPaletteVisible,
+                  !navigationRequest.isPlaylistPaletteVisible else {
+                return .ignored
+            }
+            if vimNav.hasActiveSelection {
+                return .ignored
+            }
+            vimNav.activate()
+            isContainerFocused = true
+            if let section = selectedSection,
+               let idx = vimNav.sidebarSections.firstIndex(of: section) {
+                vimNav.sidebarIndex = idx
+            }
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "j")) { _ in
+            guard vimNav.isActive else { return .ignored }
+            vimNav.moveDown()
+            syncSidebarSelection()
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "k")) { _ in
+            guard vimNav.isActive else { return .ignored }
+            vimNav.moveUp()
+            syncSidebarSelection()
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "l")) { _ in
+            guard vimNav.isActive else { return .ignored }
+            if vimNav.isGridMode && vimNav.focusZone == .content {
+                if vimNav.contentIndex < vimNav.contentItemCount - 1 {
+                    vimNav.contentIndex += 1
+                }
+            } else {
+                vimNav.moveRight()
+            }
+            return .handled
+        }
+        .onKeyPress(characters: .init(charactersIn: "h")) { _ in
+            guard vimNav.isActive else { return .ignored }
+            if vimNav.isGridMode && vimNav.focusZone == .content {
+                if vimNav.contentIndex > 0 {
+                    vimNav.contentIndex -= 1
+                } else {
+                    vimNav.moveLeft()
+                }
+            } else if vimNav.focusZone == .content && selectedAlbum != nil {
+                navigateBack()
+                vimNav.contentIndex = 0
+            } else {
+                vimNav.moveLeft()
+            }
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard vimNav.isActive else { return .ignored }
+            if vimNav.focusZone == .sidebar {
+                vimNav.focusZone = .content
+                vimNav.contentIndex = 0
+            } else {
+                vimNav.triggerEnter()
+            }
+            return .handled
+        }
+        .onChange(of: isContainerFocused) { _, focused in
+            if !focused {
+                vimNav.deactivate()
+            }
         }
         .overlay {
             if navigationRequest.isCommandPaletteVisible {
@@ -186,6 +261,14 @@ struct ContentView: View {
         case .none:
             Text("Select a section")
                 .foregroundStyle(colors.textSecondary)
+        }
+    }
+
+    private func syncSidebarSelection() {
+        guard vimNav.focusZone == .sidebar else { return }
+        let sections = vimNav.sidebarSections
+        if vimNav.sidebarIndex >= 0 && vimNav.sidebarIndex < sections.count {
+            selectedSection = sections[vimNav.sidebarIndex]
         }
     }
 

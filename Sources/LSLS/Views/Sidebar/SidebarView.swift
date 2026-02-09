@@ -24,6 +24,7 @@ struct SidebarView: View {
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
     @Environment(PodcastManager.self) private var podcastManager
+    @Environment(VimNavigation.self) private var vimNav
     @State private var playlists: [Playlist] = []
     @State private var smartPlaylists: [SmartPlaylist] = []
     @State private var showNewPlaylist = false
@@ -270,6 +271,7 @@ struct SidebarView: View {
         .task {
             loadPlaylists()
             loadSmartPlaylists()
+            updateSidebarSections()
         }
         .alert("New Playlist", isPresented: $showNewPlaylist) {
             TextField("Playlist name", text: $newPlaylistName)
@@ -304,11 +306,24 @@ struct SidebarView: View {
         .tag(tag)
     }
 
+    private func updateSidebarSections() {
+        var sections: [SidebarSection] = [.albums, .artists, .songs, .recentlyAdded, .podcasts, .syncList]
+        if plexState.isConnected {
+            sections.append(contentsOf: [.plexAlbums, .plexArtists])
+        }
+        sections.append(.plexSettings)
+        sections.append(contentsOf: playlists.map { .playlist($0) })
+        sections.append(contentsOf: smartPlaylists.map { .smartPlaylist($0) })
+        vimNav.sidebarSections = sections
+        vimNav.sidebarItemCount = sections.count
+    }
+
     private func loadPlaylists() {
         do {
             playlists = try db.dbPool.read { db in
                 try LibraryQueries.allPlaylists(in: db)
             }
+            updateSidebarSections()
         } catch {
             print("Failed to load playlists: \(error)")
         }
@@ -344,6 +359,7 @@ struct SidebarView: View {
             smartPlaylists = try db.dbPool.read { db in
                 try LibraryQueries.allSmartPlaylists(in: db)
             }
+            updateSidebarSections()
         } catch {
             print("Failed to load smart playlists: \(error)")
         }
