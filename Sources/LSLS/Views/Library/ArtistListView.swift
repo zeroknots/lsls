@@ -43,6 +43,7 @@ struct ArtistListView: View {
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
     @Environment(NavigationRequest.self) private var navigationRequest
+    @Environment(VimNavigation.self) private var vimNav
     @State private var artists: [Artist] = []
     @State private var selectedArtist: Artist?
     @State private var albums: [AlbumInfo] = []
@@ -83,6 +84,30 @@ struct ArtistListView: View {
             }
             navigationRequest.selectArtistId = nil
         }
+        .onChange(of: vimNav.contentIndex) { _, newIndex in
+            guard vimNav.isActive, vimNav.focusZone == .content else { return }
+            if newIndex >= 0 && newIndex < artists.count {
+                selectedArtist = artists[newIndex]
+            }
+        }
+        .onChange(of: vimNav.enterTrigger) {
+            guard vimNav.isActive else { return }
+            if vimNav.focusZone == .content {
+                // Select the artist and move to detail zone
+                if vimNav.contentIndex >= 0 && vimNav.contentIndex < artists.count {
+                    selectedArtist = artists[vimNav.contentIndex]
+                    vimNav.focusZone = .contentDetail
+                    vimNav.detailIndex = 0
+                }
+            } else if vimNav.focusZone == .contentDetail {
+                // Play the track
+                let flat = flatDetailTracks
+                if vimNav.detailIndex >= 0 && vimNav.detailIndex < flat.count {
+                    let allTracks = flat
+                    playerState.play(track: flat[vimNav.detailIndex], fromQueue: allTracks)
+                }
+            }
+        }
         .sheet(item: $trackToEdit) { trackInfo in
             TrackEditView(trackInfo: trackInfo) {
                 loadAlbums()
@@ -121,13 +146,25 @@ struct ArtistListView: View {
     private var artistBrowser: some View {
         HStack(spacing: 0) {
             // Artist list column
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(artists) { artist in
-                        artistRow(artist)
+            ScrollViewReader { artistScrollProxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(artists) { artist in
+                            artistRow(artist)
+                                .id("artist-\(artist.id ?? 0)")
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .onChange(of: vimNav.contentIndex) { _, newIndex in
+                    guard vimNav.isActive, vimNav.focusZone == .content else { return }
+                    if newIndex >= 0 && newIndex < artists.count {
+                        let artistId = artists[newIndex].id ?? 0
+                        withAnimation {
+                            artistScrollProxy.scrollTo("artist-\(artistId)", anchor: .center)
+                        }
                     }
                 }
-                .padding(.vertical, 8)
             }
             .frame(width: 220)
             .background(colors.backgroundSecondary.opacity(0.5))
@@ -184,6 +221,16 @@ struct ArtistListView: View {
                                     scrollProxy.scrollTo("track-\(trackId)", anchor: .center)
                                 }
                                 navigationRequest.scrollToTrackId = nil
+                            }
+                            .onChange(of: vimNav.detailIndex) { _, newIndex in
+                                guard vimNav.isActive, vimNav.focusZone == .contentDetail else { return }
+                                let flat = flatDetailTracks
+                                if newIndex >= 0 && newIndex < flat.count {
+                                    let trackId = flat[newIndex].track.id ?? 0
+                                    withAnimation {
+                                        scrollProxy.scrollTo("track-\(trackId)", anchor: .center)
+                                    }
+                                }
                             }
                         }
                     }
@@ -269,6 +316,9 @@ struct ArtistListView: View {
 
     private func artistRow(_ artist: Artist) -> some View {
         let isSelected = selectedArtist?.id == artist.id
+        let isVimHighlighted = vimNav.isActive && vimNav.focusZone == .content
+            && artists.firstIndex(where: { $0.id == artist.id }).map({ $0 == vimNav.contentIndex }) ?? false
+        let isHighlighted = isSelected || isVimHighlighted
 
         return Button {
             selectedArtist = artist
@@ -278,7 +328,7 @@ struct ArtistListView: View {
 
                 Text(artist.name)
                     .font(.system(size: theme.typography.bodySize))
-                    .foregroundStyle(isSelected ? colors.accent : colors.textPrimary)
+                    .foregroundStyle(isHighlighted ? colors.accent : colors.textPrimary)
                     .lineLimit(1)
 
                 Spacer()
@@ -287,7 +337,7 @@ struct ArtistListView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: theme.shapes.sidebarItemRadius)
-                    .fill(isSelected ? colors.accent.opacity(0.1) : .clear)
+                    .fill(isHighlighted ? colors.accent.opacity(0.1) : .clear)
             )
             .padding(.horizontal, 8)
         }
@@ -332,6 +382,20 @@ struct ArtistListView: View {
             onFavoriteToggle: { toggleFavorite(trackInfo) },
             onAnalyzeBPM: { Task { await LibraryManager.analyzeBPM(for: trackInfo.track) } }
         )
+        .overlay(alignment: .leading) {
+            if isVimDetailHighlighted(trackInfo) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(colors.accent)
+                    .frame(width: 3)
+                    .padding(.vertical, 4)
+            }
+        }
+        .background {
+            if isVimDetailHighlighted(trackInfo) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(colors.accent.opacity(0.08))
+            }
+        }
     }
 
     private func handleSyncToggle(_ trackInfo: TrackInfo) {
@@ -350,12 +414,24 @@ struct ArtistListView: View {
         return ArtistAvatarView(album: album, size: size)
     }
 
+    private var flatDetailTracks: [TrackInfo] {
+        albums.flatMap { albumTracks[$0.album.id ?? -1] ?? [] }
+    }
+
+    private func isVimDetailHighlighted(_ trackInfo: TrackInfo) -> Bool {
+        guard vimNav.isActive, vimNav.focusZone == .contentDetail else { return false }
+        let flat = flatDetailTracks
+        guard vimNav.detailIndex >= 0 && vimNav.detailIndex < flat.count else { return false }
+        return flat[vimNav.detailIndex].track.id == trackInfo.track.id
+    }
+
     private func loadArtists() {
         do {
             artists = try db.dbPool.read { db in
                 try LibraryQueries.allArtists(in: db)
             }
             loadArtistArtwork()
+            vimNav.contentItemCount = artists.count
             if selectedArtist == nil, let first = artists.first {
                 selectedArtist = first
             }
@@ -400,6 +476,7 @@ struct ArtistListView: View {
                 }
             }
             albumTracks = tracks
+            vimNav.detailItemCount = flatDetailTracks.count
         } catch {
             print("Failed to load albums: \(error)")
         }

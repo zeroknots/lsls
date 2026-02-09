@@ -43,6 +43,7 @@ struct LSLSApp: App {
     @State private var updateChecker = UpdateChecker()
     @State private var navigationRequest = NavigationRequest()
     @State private var podcastManager = PodcastManager()
+    @State private var vimNavigation = VimNavigation()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -60,6 +61,7 @@ struct LSLSApp: App {
                 .environment(rockboxThemeManager)
                 .environment(navigationRequest)
                 .environment(podcastManager)
+                .environment(vimNavigation)
                 .frame(minWidth: 900, minHeight: 600)
                 .task {
                     syncManager.themeManager = rockboxThemeManager

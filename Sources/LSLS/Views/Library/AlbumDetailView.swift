@@ -7,6 +7,7 @@ struct AlbumDetailView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.theme) private var theme
     @Environment(SyncManager.self) private var syncManager
+    @Environment(VimNavigation.self) private var vimNav
     @State private var tracks: [TrackInfo] = []
     @State private var artist: Artist?
     @State private var playlists: [Playlist] = []
@@ -93,13 +94,36 @@ struct AlbumDetailView: View {
                 .frame(height: 1)
 
             // Track list
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(tracks) { trackInfo in
-                        trackRow(for: trackInfo)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(tracks.enumerated()), id: \.element.id) { index, trackInfo in
+                            let isVimHighlighted = vimNav.isActive && vimNav.focusZone == .content && index == vimNav.contentIndex
+                            trackRow(for: trackInfo)
+                                .id(trackInfo.id)
+                                .overlay(alignment: .leading) {
+                                    if isVimHighlighted {
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(colors.accent)
+                                            .frame(width: 3)
+                                            .padding(.vertical, 4)
+                                    }
+                                }
+                                .background {
+                                    if isVimHighlighted {
+                                        RoundedRectangle(cornerRadius: 6).fill(colors.accent.opacity(0.08))
+                                    }
+                                }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .onChange(of: vimNav.contentIndex) { _, newIndex in
+                    guard vimNav.isActive, vimNav.focusZone == .content else { return }
+                    if newIndex >= 0 && newIndex < tracks.count {
+                        withAnimation { proxy.scrollTo(tracks[newIndex].id, anchor: .center) }
                     }
                 }
-                .padding(.horizontal, 16)
             }
         }
         .background(colors.background)
@@ -125,6 +149,11 @@ struct AlbumDetailView: View {
             }
         } message: {
             Text("This will remove \"\(trackToDelete?.track.title ?? "")\" from your library and all playlists.")
+        }
+        .onChange(of: vimNav.enterTrigger) {
+            guard vimNav.isActive, vimNav.focusZone == .content else { return }
+            guard vimNav.contentIndex >= 0 && vimNav.contentIndex < tracks.count else { return }
+            playerState.play(track: tracks[vimNav.contentIndex], fromQueue: tracks)
         }
     }
 
@@ -169,6 +198,7 @@ struct AlbumDetailView: View {
             tracks = try db.dbPool.read { db in
                 try LibraryQueries.tracksForAlbum(albumId, in: db)
             }
+            vimNav.contentItemCount = tracks.count
             if let artistId = album.artistId {
                 artist = try db.dbPool.read { db in
                     try Artist.fetchOne(db, id: artistId)
