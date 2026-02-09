@@ -11,6 +11,9 @@ struct SettingsView: View {
             ThemeSettingsTab()
                 .tabItem { Label("Theme", systemImage: "paintbrush") }
 
+            PodcastSettingsTab()
+                .tabItem { Label("Podcasts", systemImage: "mic") }
+
             DAPSyncSettingsTab()
                 .tabItem { Label("DAP Sync", systemImage: "arrow.triangle.2.circlepath") }
         }
@@ -155,6 +158,7 @@ private struct DAPSyncSettingsTab: View {
                 Toggle("Auto-sync when device is connected", isOn: $syncManager.settings.autoSyncEnabled)
                 Toggle("Sync play counts & ratings", isOn: $syncManager.settings.syncPlayCountsEnabled)
                 Toggle("Export playlists to device", isOn: $syncManager.settings.syncPlaylistsEnabled)
+                Toggle("Sync podcast episodes to device", isOn: $syncManager.settings.syncPodcastsEnabled)
                 Toggle("Install themes to device", isOn: $syncManager.settings.syncThemesEnabled)
 
                 LabeledContent("Items in sync list") {
@@ -272,6 +276,86 @@ private struct DAPSyncSettingsTab: View {
             } catch {
                 print("Failed to install themes: \(error)")
             }
+        }
+    }
+}
+
+// MARK: - Podcasts
+
+private struct PodcastSettingsTab: View {
+    @Environment(PodcastManager.self) private var podcastManager
+
+    var body: some View {
+        @Bindable var podcastManager = podcastManager
+
+        Form {
+            Section("Storage") {
+                HStack {
+                    TextField("Download Directory", text: $podcastManager.storageDirectory)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button("Browse...") {
+                        browseDirectory()
+                    }
+                }
+
+                Text("Downloaded episodes will be saved here")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Episode Cleanup") {
+                Picker("Delete downloaded episodes", selection: $podcastManager.cleanupMode) {
+                    ForEach(EpisodeCleanupMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+
+                if podcastManager.cleanupMode == .afterDays {
+                    Stepper("After \(podcastManager.cleanupDays) days", value: $podcastManager.cleanupDays, in: 1...365)
+                }
+
+                switch podcastManager.cleanupMode {
+                case .manual:
+                    Text("Downloaded episodes are kept until you manually delete them")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .afterPlaying:
+                    Text("Downloaded episode files are deleted after you finish listening to them")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .afterDays:
+                    Text("Downloaded episode files older than \(podcastManager.cleanupDays) days are automatically deleted")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Subscriptions") {
+                LabeledContent("Subscribed podcasts") {
+                    Text("\(podcastManager.podcasts.count)")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: podcastManager.storageDirectory) {
+            podcastManager.saveStorageDirectory()
+        }
+        .onChange(of: podcastManager.cleanupMode) {
+            podcastManager.saveCleanupSettings()
+        }
+        .onChange(of: podcastManager.cleanupDays) {
+            podcastManager.saveCleanupSettings()
+        }
+    }
+
+    private func browseDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.message = "Select podcast download directory"
+        if panel.runModal() == .OK, let url = panel.url {
+            podcastManager.storageDirectory = url.path
         }
     }
 }

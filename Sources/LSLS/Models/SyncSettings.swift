@@ -16,6 +16,7 @@ struct RockboxSettings: Equatable, Sendable {
     var pollingIntervalSeconds: Int = 10
     var syncPlayCountsEnabled: Bool = true
     var syncPlaylistsEnabled: Bool = true
+    var syncPodcastsEnabled: Bool = true
     var syncThemesEnabled: Bool = false
 
     static func load(from db: Database) throws -> RockboxSettings {
@@ -28,6 +29,7 @@ struct RockboxSettings: Equatable, Sendable {
             case "pollingIntervalSeconds": settings.pollingIntervalSeconds = Int(row.value) ?? 10
             case "syncPlayCountsEnabled": settings.syncPlayCountsEnabled = row.value == "true"
             case "syncPlaylistsEnabled": settings.syncPlaylistsEnabled = row.value == "true"
+            case "syncPodcastsEnabled": settings.syncPodcastsEnabled = row.value == "true"
             case "syncThemesEnabled": settings.syncThemesEnabled = row.value == "true"
             default: break
             }
@@ -41,6 +43,7 @@ struct RockboxSettings: Equatable, Sendable {
         try SyncSettingRow(key: "pollingIntervalSeconds", value: "\(pollingIntervalSeconds)").save(db)
         try SyncSettingRow(key: "syncPlayCountsEnabled", value: syncPlayCountsEnabled ? "true" : "false").save(db)
         try SyncSettingRow(key: "syncPlaylistsEnabled", value: syncPlaylistsEnabled ? "true" : "false").save(db)
+        try SyncSettingRow(key: "syncPodcastsEnabled", value: syncPodcastsEnabled ? "true" : "false").save(db)
         try SyncSettingRow(key: "syncThemesEnabled", value: syncThemesEnabled ? "true" : "false").save(db)
     }
 }

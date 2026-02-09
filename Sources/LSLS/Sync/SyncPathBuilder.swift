@@ -46,4 +46,15 @@ enum SyncPathBuilder {
         let album = sanitize(albumTitle ?? "Unknown Album")
         return "Music/\(artist)/\(album)/cover.jpg"
     }
+
+    static func podcastPath(
+        podcastTitle: String,
+        episodeTitle: String,
+        fileExtension: String
+    ) -> String {
+        let podcast = sanitize(podcastTitle)
+        let episode = sanitize(episodeTitle)
+        let ext = fileExtension.lowercased()
+        return "Podcasts/\(podcast)/\(episode).\(ext)"
+    }
 }

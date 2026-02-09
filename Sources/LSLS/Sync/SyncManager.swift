@@ -309,7 +309,13 @@ final class SyncManager {
                 try await syncPlaylists(resolvedTrackIds: resolvedTrackIds, logsByTrackId: updatedLogsByTrackId, basePath: basePath)
             }
 
-            // 9. Sync Rockbox themes
+            // 9. Sync podcast episodes
+            if settings.syncPodcastsEnabled {
+                syncStatus = "Syncing podcasts..."
+                await syncPodcastEpisodes(to: basePath)
+            }
+
+            // 10. Sync Rockbox themes
             if settings.syncThemesEnabled, let themeManager, !themeManager.installedThemes.isEmpty {
                 syncStatus = "Installing themes..."
                 try await themeManager.installThemesToDevice(
@@ -595,6 +601,74 @@ final class SyncManager {
             try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
             try? fm.copyItem(atPath: artworkSourcePath, toPath: destURL.path)
         }.value
+    }
+
+    // MARK: - Podcast Sync
+
+    private func syncPodcastEpisodes(to basePath: URL) async {
+        do {
+            // Get downloaded episodes for podcasts in the sync list
+            let syncedPodcastIds = try await db.dbPool.read { db in
+                try PodcastSyncItem.fetchAll(db).map(\.podcastId)
+            }
+            guard !syncedPodcastIds.isEmpty else { return }
+
+            let episodes = try await db.dbPool.read { db in
+                try Episode
+                    .filter(Column("isDownloaded") == true)
+                    .filter(syncedPodcastIds.contains(Column("podcastId")))
+                    .fetchAll(db)
+            }
+            guard !episodes.isEmpty else { return }
+
+            // Load podcasts for title lookup
+            let podcasts = try await db.dbPool.read { db in
+                try Podcast.filter(syncedPodcastIds.contains(Column("id"))).fetchAll(db)
+            }
+            let podcastById = Dictionary(uniqueKeysWithValues: podcasts.compactMap { p in
+                p.id.map { ($0, p) }
+            })
+
+            let podcastsDir = basePath.appendingPathComponent("Podcasts")
+
+            for episode in episodes {
+                if Task.isCancelled { break }
+                guard checkDeviceConnection() else {
+                    syncError = "Device disconnected during sync"
+                    break
+                }
+
+                guard let localPath = episode.localFilePath else { continue }
+                guard let podcast = podcastById[episode.podcastId] else { continue }
+
+                let ext = (localPath as NSString).pathExtension
+                let relativePath = SyncPathBuilder.podcastPath(
+                    podcastTitle: podcast.title,
+                    episodeTitle: episode.title,
+                    fileExtension: ext
+                )
+                let destURL = basePath.appendingPathComponent(relativePath)
+
+                await Task.detached(priority: .utility) {
+                    let fm = FileManager.default
+                    guard fm.fileExists(atPath: localPath) else { return }
+                    guard !fm.fileExists(atPath: destURL.path) else { return }
+
+                    let destDir = destURL.deletingLastPathComponent()
+                    try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+                    try? fm.copyItem(atPath: localPath, toPath: destURL.path)
+                }.value
+            }
+
+            // Clean empty podcast directories
+            if FileManager.default.fileExists(atPath: podcastsDir.path) {
+                await Task.detached(priority: .utility) {
+                    self.cleanEmptyDirectories(at: podcastsDir)
+                }.value
+            }
+        } catch {
+            print("Failed to sync podcast episodes: \(error)")
+        }
     }
 
     private nonisolated func cleanEmptyDirectories(at url: URL) {

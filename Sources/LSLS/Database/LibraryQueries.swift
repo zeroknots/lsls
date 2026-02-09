@@ -657,3 +657,40 @@ extension SmartPlaylistRule {
         static let position = Column("position")
     }
 }
+
+extension Podcast {
+    enum Columns {
+        static let id = Column("id")
+        static let title = Column("title")
+        static let author = Column("author")
+        static let feedUrl = Column("feedUrl")
+        static let artworkUrl = Column("artworkUrl")
+        static let lastFetchedAt = Column("lastFetchedAt")
+        static let dateSubscribed = Column("dateSubscribed")
+    }
+}
+
+extension Episode {
+    enum Columns {
+        static let id = Column("id")
+        static let podcastId = Column("podcastId")
+        static let title = Column("title")
+        static let audioUrl = Column("audioUrl")
+        static let localFilePath = Column("localFilePath")
+        static let pubDate = Column("pubDate")
+        static let duration = Column("duration")
+        static let fileSize = Column("fileSize")
+        static let isDownloaded = Column("isDownloaded")
+        static let isPlayed = Column("isPlayed")
+        static let playbackPosition = Column("playbackPosition")
+        static let dateAdded = Column("dateAdded")
+    }
+}
+
+extension PodcastSyncItem {
+    enum Columns {
+        static let id = Column("id")
+        static let podcastId = Column("podcastId")
+        static let dateAdded = Column("dateAdded")
+    }
+}

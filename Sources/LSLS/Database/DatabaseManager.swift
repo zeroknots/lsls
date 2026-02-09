@@ -124,6 +124,41 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("v6") { db in
+            try db.create(table: "podcast") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("title", .text).notNull()
+                t.column("author", .text)
+                t.column("feedUrl", .text).notNull().unique()
+                t.column("artworkUrl", .text)
+                t.column("description", .text)
+                t.column("lastFetchedAt", .datetime)
+                t.column("dateSubscribed", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "episode") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("podcastId", .integer).notNull().references("podcast", onDelete: .cascade)
+                t.column("title", .text).notNull()
+                t.column("audioUrl", .text).notNull()
+                t.column("localFilePath", .text)
+                t.column("pubDate", .datetime).notNull()
+                t.column("duration", .double).notNull().defaults(to: 0)
+                t.column("fileSize", .integer)
+                t.column("description", .text)
+                t.column("isDownloaded", .boolean).notNull().defaults(to: false)
+                t.column("isPlayed", .boolean).notNull().defaults(to: false)
+                t.column("playbackPosition", .double).notNull().defaults(to: 0)
+                t.column("dateAdded", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.create(table: "podcastSyncItem") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("podcastId", .integer).notNull().references("podcast", onDelete: .cascade).unique()
+                t.column("dateAdded", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+        }
+
         try migrator.migrate(dbPool)
     }
 }
