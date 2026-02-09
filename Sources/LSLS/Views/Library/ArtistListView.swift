@@ -54,6 +54,7 @@ struct ArtistListView: View {
     @State private var trackToEdit: TrackInfo? = nil
     @State private var trackToDelete: TrackInfo? = nil
     @State private var albumToDelete: AlbumInfo? = nil
+    @State private var cachedFlatTracks: [TrackInfo] = []
 
     private let db = DatabaseManager.shared
 
@@ -86,9 +87,8 @@ struct ArtistListView: View {
         }
         .onChange(of: vimNav.contentIndex) { _, newIndex in
             guard vimNav.isActive, vimNav.focusZone == .content else { return }
-            if newIndex >= 0 && newIndex < artists.count {
-                selectedArtist = artists[newIndex]
-            }
+            guard newIndex >= 0 && newIndex < artists.count else { return }
+            selectedArtist = artists[newIndex]
         }
         .onChange(of: vimNav.enterTrigger) {
             guard vimNav.isActive else { return }
@@ -101,7 +101,7 @@ struct ArtistListView: View {
                 }
             } else if vimNav.focusZone == .contentDetail {
                 // Play the track
-                let flat = flatDetailTracks
+                let flat = cachedFlatTracks
                 if vimNav.detailIndex >= 0 && vimNav.detailIndex < flat.count {
                     let allTracks = flat
                     playerState.play(track: flat[vimNav.detailIndex], fromQueue: allTracks)
@@ -199,7 +199,7 @@ struct ArtistListView: View {
                         // Scrollable albums + tracks
                         ScrollViewReader { scrollProxy in
                             ScrollView {
-                                VStack(alignment: .leading, spacing: 0) {
+                                LazyVStack(alignment: .leading, spacing: 0) {
                                     ForEach(albums) { albumInfo in
                                         albumSection(albumInfo)
 
@@ -224,7 +224,7 @@ struct ArtistListView: View {
                             }
                             .onChange(of: vimNav.detailIndex) { _, newIndex in
                                 guard vimNav.isActive, vimNav.focusZone == .contentDetail else { return }
-                                let flat = flatDetailTracks
+                                let flat = cachedFlatTracks
                                 if newIndex >= 0 && newIndex < flat.count {
                                     let trackId = flat[newIndex].track.id ?? 0
                                     withAnimation {
@@ -252,7 +252,6 @@ struct ArtistListView: View {
 
     private func albumSection(_ albumInfo: AlbumInfo) -> some View {
         let tracks = albumTracks[albumInfo.album.id ?? -1] ?? []
-        let allArtistTracks = albums.flatMap { albumTracks[$0.album.id ?? -1] ?? [] }
 
         return VStack(alignment: .leading, spacing: 0) {
             // Album header: art + title + year
@@ -307,7 +306,7 @@ struct ArtistListView: View {
 
             // Track list for this album
             ForEach(tracks) { trackInfo in
-                albumTrackRow(for: trackInfo, allArtistTracks: allArtistTracks)
+                albumTrackRow(for: trackInfo)
                     .id("track-\(trackInfo.track.id ?? 0)")
             }
             .padding(.horizontal, 8)
@@ -361,7 +360,7 @@ struct ArtistListView: View {
     }
 
     @ViewBuilder
-    private func albumTrackRow(for trackInfo: TrackInfo, allArtistTracks: [TrackInfo]) -> some View {
+    private func albumTrackRow(for trackInfo: TrackInfo) -> some View {
         let isPlaying = playerState.currentTrack?.track.id == trackInfo.track.id
         let isInSyncList = trackInfo.track.id.map { syncManager.isTrackInSyncList($0) } ?? false
         let isFavorite = trackInfo.track.isFavorite
@@ -373,7 +372,7 @@ struct ArtistListView: View {
             isInSyncList: isInSyncList,
             isFavorite: isFavorite,
             playlists: playlists,
-            onPlay: { playerState.play(track: trackInfo, fromQueue: allArtistTracks) },
+            onPlay: { playerState.play(track: trackInfo, fromQueue: cachedFlatTracks) },
             onAddToQueue: { playerState.addToQueueEnd(trackInfo) },
             onSyncToggle: { handleSyncToggle(trackInfo) },
             onAddToPlaylist: { playlist in addTrackToPlaylist(trackInfo, playlist: playlist) },
@@ -414,15 +413,14 @@ struct ArtistListView: View {
         return ArtistAvatarView(album: album, size: size)
     }
 
-    private var flatDetailTracks: [TrackInfo] {
-        albums.flatMap { albumTracks[$0.album.id ?? -1] ?? [] }
+    private func rebuildFlatTracks() {
+        cachedFlatTracks = albums.flatMap { albumTracks[$0.album.id ?? -1] ?? [] }
     }
 
     private func isVimDetailHighlighted(_ trackInfo: TrackInfo) -> Bool {
         guard vimNav.isActive, vimNav.focusZone == .contentDetail else { return false }
-        let flat = flatDetailTracks
-        guard vimNav.detailIndex >= 0 && vimNav.detailIndex < flat.count else { return false }
-        return flat[vimNav.detailIndex].track.id == trackInfo.track.id
+        guard vimNav.detailIndex >= 0 && vimNav.detailIndex < cachedFlatTracks.count else { return false }
+        return cachedFlatTracks[vimNav.detailIndex].track.id == trackInfo.track.id
     }
 
     private func loadArtists() {
@@ -476,7 +474,8 @@ struct ArtistListView: View {
                 }
             }
             albumTracks = tracks
-            vimNav.detailItemCount = flatDetailTracks.count
+            rebuildFlatTracks()
+            vimNav.detailItemCount = cachedFlatTracks.count
         } catch {
             print("Failed to load albums: \(error)")
         }

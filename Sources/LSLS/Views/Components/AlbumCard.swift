@@ -55,9 +55,11 @@ struct AlbumCard: View {
             }
         }
         .frame(width: size)
-        .scaleEffect(isHovered && !isSelected ? theme.effects.hoverScale : 1.0)
-        .animation(.spring(duration: 0.2), value: isHovered)
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            withTransaction(Transaction(animation: nil)) {
+                isHovered = hovering
+            }
+        }
         .onTapGesture {
             let withCommand = NSEvent.modifierFlags.contains(.command)
             onTap?(withCommand)

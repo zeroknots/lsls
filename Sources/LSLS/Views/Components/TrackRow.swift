@@ -115,8 +115,11 @@ struct TrackRow: View {
                 .fill(isSelected ? colors.accent.opacity(0.15) : (isHovered ? colors.surfaceHover : .clear))
         )
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            withTransaction(Transaction(animation: nil)) {
+                isHovered = hovering
+            }
+        }
         .draggable(LibraryDragItem.track(trackInfo))
         .onTapGesture(count: 2) {
             onPlay()

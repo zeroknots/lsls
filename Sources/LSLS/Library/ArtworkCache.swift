@@ -21,7 +21,10 @@ final class ArtworkCache {
         return cache.object(forKey: "album-\(albumId)" as NSString)
     }
 
-    /// Loads artwork asynchronously, reading file data off the main thread.
+    /// Max pixel dimension to downsample artwork to (2x retina of largest display size ~320pt).
+    private nonisolated static let maxPixelSize: CGFloat = 640
+
+    /// Loads artwork asynchronously, downsampling to display size off the main thread.
     func loadArtwork(for album: Album) async -> NSImage? {
         guard let albumId = album.id else { return nil }
         let key = "album-\(albumId)" as NSString
@@ -31,9 +34,26 @@ final class ArtworkCache {
         }
 
         guard let path = album.artworkPath else { return nil }
+        let maxSize = Self.maxPixelSize
 
+        // Downsample on a background thread, returning raw Data to cross isolation boundary
         let data: Data? = await Task.detached(priority: .userInitiated) {
-            try? Data(contentsOf: URL(fileURLWithPath: path))
+            let url = URL(fileURLWithPath: path)
+            let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, options as CFDictionary) else { return nil }
+
+            let downsampleOptions: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxSize,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+            ]
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions as CFDictionary) else {
+                return nil
+            }
+
+            let rep = NSBitmapImageRep(cgImage: cgImage)
+            return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
         }.value
 
         guard let data, let image = NSImage(data: data) else { return nil }

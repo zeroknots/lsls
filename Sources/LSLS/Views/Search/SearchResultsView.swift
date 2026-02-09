@@ -14,6 +14,7 @@ struct SearchResultsView: View {
     @State private var playlists: [Playlist] = []
     @State private var trackToEdit: TrackInfo? = nil
     @State private var trackToDelete: TrackInfo? = nil
+    @State private var searchTask: Task<Void, Never>?
 
     private let db = DatabaseManager.shared
 
@@ -21,7 +22,18 @@ struct SearchResultsView: View {
         searchContent
         .background(colors.background)
         .onChange(of: searchText) { _, newValue in
-            performSearch(newValue)
+            searchTask?.cancel()
+            if newValue.isEmpty {
+                tracks = []
+                albums = []
+                artists = []
+                return
+            }
+            searchTask = Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                performSearch(newValue)
+            }
         }
         .task {
             loadPlaylists()
